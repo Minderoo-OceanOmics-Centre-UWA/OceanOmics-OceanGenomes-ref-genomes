@@ -1,2 +1,3 @@
 sample,hifi_dir,hic_dir,version,date,tolid,taxid,species
-OG863,/scratch/pawsey0964/tpeirce/ref-gen/OG863/hifi,/scratch/pawsey0964/tpeirce/ref-gen/OG863/hic,hic1,v250331,OG863,211834,Lutjanus argentimaculatus
+OG910,/scratch/pawsey0964/lhuet/ref-gen/OG910/hifi,/scratch/pawsey0964/lhuet/ref-gen/OG910/hic,hic2,v241127,OG910,443688,Choerodon rubescens
+

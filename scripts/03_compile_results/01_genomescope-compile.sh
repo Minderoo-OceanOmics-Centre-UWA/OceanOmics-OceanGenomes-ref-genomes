@@ -1,6 +1,6 @@
 #!/bin/bash
 
-base_dir="/scratch/pawsey0964/tpeirce/ref-gen" 
+base_dir="/scratch/pawsey0964/$USER/ref-gen" 
 # Define the output file and create the column headings
 TSV="genomescope_compiled_results.tsv"
 echo sample,homozygosity,heterozygosity,genomesize,repeatsize,uniquesize,modelfit,errorrate | sed 's/,/\t/g' | tee $TSV

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Compile OMNIC mapping stats with stage information
-base_dir="/scratch/pawsey0964/tpeirce/ref-gen" 
+base_dir="/scratch/pawsey0964/$USER/ref-gen" 
 # Print header
 echo -e "sample\tstage\thaplotype\ttotal\ttotal_unmapped\ttotal_single_sided_mapped\ttotal_mapped\ttotal_dups\ttotal_nodups\tcis\ttrans" > final_omnic_stats_report.txt
 

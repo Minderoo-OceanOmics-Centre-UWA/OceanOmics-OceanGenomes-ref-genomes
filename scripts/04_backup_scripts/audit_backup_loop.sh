@@ -2,7 +2,7 @@
 set -euo pipefail
 
 AUDITOR="$(dirname "$0")/audit_backup.sh"
-CSV_FILE="/scratch/pawsey0964/lhuet/ref-gen/yahs/OceanOmics-OceanGenomes-ref-genomes/assets/samplesheet_run1.csv"
+CSV_FILE="/scratch/pawsey0964/lhuet/ref-gen/OceanOmics-OceanGenomes-ref-genomes/assets/samplesheet.csv"
 REMOTE="pawsey0964:oceanomics-refassemblies"
 
 # You can override with: ./audit_loop.sh /path/to/sheet.csv

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set base directory
-base_dir="/scratch/pawsey0964/tpeirce/ref-gen/OG*"
+base_dir="/scratch/pawsey0964/$USER/ref-gen/OG*"
 
 # Output file with SQL-compatible column headers
 echo -e "filename\tnum_contigs\tcontig_n50\tcontig_n50_size_mb\tnum_scaffolds\tscaffold_n50\tscaffold_n50_size_mb\tlargest_scaffold\tlargest_scaffold_size_mb\ttotal_scaffold_length\ttotal_scaffold_length_size_mb\tgc_content_percent" > final_gfastats_report.txt

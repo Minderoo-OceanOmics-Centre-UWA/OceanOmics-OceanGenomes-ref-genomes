@@ -2,7 +2,7 @@ import os
 import csv
 
 # Define the base directory where the samples are stored
-base_dir = "/scratch/pawsey0964/tpeirce/ref-gen"  # Change this to the correct path
+base_dir = "/scratch/pawsey0964/lhuet/ref-gen"  # Change this to the correct path
 output_tsv = "hifiadaptorfilt_stats_summary.tsv"
 
 # Dictionary to accumulate totals per sample

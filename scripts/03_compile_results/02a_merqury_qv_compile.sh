@@ -1,5 +1,5 @@
 output_file="merqury.qv.stats.tsv"
-base_dir="/scratch/pawsey0964/tpeirce/ref-gen/OG*" 
+base_dir="/scratch/pawsey0964/$USER/ref-gen/OG*" 
 echo -e "sample\tunique_k_mers_assembly\tk_mers_total\tqv\terror" > "$output_file"
 
 # Find all .hifiasm.qv files

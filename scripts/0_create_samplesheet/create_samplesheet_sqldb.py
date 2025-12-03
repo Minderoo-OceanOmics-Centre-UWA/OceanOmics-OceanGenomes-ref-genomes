@@ -8,28 +8,25 @@ from datetime import date
 # Database connection parameters
 # =====================================
 db_params = {
-    'dbname': 'oceanomics',
+    'dbname': 'oceanomics_genomes',
     'user': 'postgres',
     'password': 'oceanomics',
-    'host': '203.101.227.69',
+    'host': '131.217.178.144',
     'port': 5432
 }
 
+# run with singularity run $SING/psycopg2:0.1.sif python
 # =====================================
 # OG IDs for the samplesheet
 # =====================================
 og_ids = [
-    'OG866','OG845','OG844','OG838','OG837','OG836',
-    'OG829','OG824','OG811','OG803','OG800','OG79',
-    'OG788','OG785','OG778','OG766','OG750','OG749',
-    'OG702','OG696','OG681','OG679','OG678','OG676',
-    'OG666','OG662','OG659','OG54','OG39','OG37',
-    'OG114','OG107'
+    'OG910'
 ]
 
 # =====================================
 # SQL function definition
 # =====================================
+drop_function_sql = "DROP FUNCTION IF EXISTS build_nfcore_samplesheet_rows(text[]);"
 create_function_sql = """
 CREATE OR REPLACE FUNCTION build_nfcore_samplesheet_rows(in_og_ids text[])
 RETURNS TABLE (
@@ -88,7 +85,8 @@ $$;
 conn = psycopg2.connect(**db_params)
 cur = conn.cursor()
 
-# Create or replace the SQL function
+# Drop and recreate the SQL function so schema changes are picked up
+cur.execute(drop_function_sql)
 cur.execute(create_function_sql)
 conn.commit()
 

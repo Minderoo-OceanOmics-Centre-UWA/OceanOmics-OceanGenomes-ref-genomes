@@ -13,6 +13,6 @@ rclone ls $s3_bucket $include_filters > to_download-pacbio.txt
  
 #second, make a loop that inserts the path into rclone to copy them onto your scratch using the file
 for line in $(awk '{print $2}' to_download-pacbio.txt); do
-rclone copy $s3_bucket/${line}  /scratch/pawsey0964/tpeirce/ref-gen/
+rclone copy $s3_bucket/${line}  /scratch/pawsey0964/lhuet/ref-gen/OG910/hifi/ --progress
 done
 
