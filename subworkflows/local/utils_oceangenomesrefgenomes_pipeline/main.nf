@@ -180,6 +180,59 @@ def genomeExistsError() {
 }
 
 //
+// Versions of the reference databases used, as a "Databases" block for the
+// MultiQC software versions section
+//
+def databaseVersionsToYAML() {
+    def dbs = [:]
+
+    if (params.buscodb) {
+        def lineage = file(params.buscodb)
+        def info    = lineage.name
+        def cfg     = lineage.resolve('dataset.cfg')
+        def tsv     = lineage.parent.resolve('file_versions.tsv')
+        if (cfg.exists()) {
+            def props = cfg.readLines()
+                .findAll { line -> line.contains('=') }
+                .collectEntries { line -> def kv = line.split('=', 2); [ kv[0].trim(), kv[1].trim() ] }
+            info = "${props.name ?: lineage.name} (created ${props.creation_date}, ${props.number_of_BUSCOs} BUSCOs)"
+        } else if (tsv.exists()) {
+            // BUSCO download index: name, date, md5, domain, type
+            def row = tsv.readLines().collect { line -> line.split('\t') }.find { cols -> cols[0] == lineage.name }
+            if (row) {
+                info = "${lineage.name} (created ${row[1]}, md5 ${row[2]})"
+            }
+        }
+        dbs['BUSCO lineage']      = info
+        dbs['BUSCO lineage path'] = lineage.toString()
+    }
+
+    if (params.gxdb) {
+        def gxdb   = file(params.gxdb)
+        def meta   = gxdb.resolve('all.meta.jsonl')
+        def readme = gxdb.resolve('all.README.txt')
+        def info   = []
+        if (meta.exists()) {
+            def m = new groovy.json.JsonSlurper().parseText(meta.readLines().find { line -> line.trim() })
+            info << "build ${m['build-date']}"
+            if (m.Gbp) { info << "${m.Gbp} Gbp" }
+        }
+        if (readme.exists()) {
+            def gx_line = readme.readLines().find { line -> line.startsWith('gx-version:') }
+            def gx_ver  = gx_line ? (gx_line =~ /git:(\S+)/) : null
+            if (gx_ver) { info << "built with gx ${gx_ver[0][1]}" }
+        }
+        dbs['FCS-GX database']      = info ? info.join(', ') : 'unknown'
+        dbs['FCS-GX database path'] = gxdb.toString()
+    }
+
+    if (!dbs) {
+        return ''
+    }
+    return (["Databases:"] + dbs.collect { k, v -> "    ${k}: \"${v}\"" }).join('\n')
+}
+
+//
 // Generate methods description for MultiQC
 //
 def toolCitationText() {

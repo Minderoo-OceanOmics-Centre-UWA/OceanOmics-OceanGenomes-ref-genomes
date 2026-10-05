@@ -59,7 +59,9 @@ process OMNIC {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        updatemapping: \$(samtools --version |& sed '1!d ; s/samtools //')
+        bwa: \$(bwa 2>&1 | sed '/^Version:/!d; s/Version: //')
+        pairtools: \$(pairtools --version 2>&1 | sed 's/.*version //')
+        samtools: \$(samtools --version |& sed '1!d ; s/samtools //')
     END_VERSIONS
     """
 
@@ -73,7 +75,9 @@ process OMNIC {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        updatemapping: \$(samtools --version |& sed '1!d ; s/samtools //')
+        bwa: \$(bwa 2>&1 | sed '/^Version:/!d; s/Version: //')
+        pairtools: \$(pairtools --version 2>&1 | sed 's/.*version //')
+        samtools: \$(samtools --version |& sed '1!d ; s/samtools //')
     END_VERSIONS
     """
 }

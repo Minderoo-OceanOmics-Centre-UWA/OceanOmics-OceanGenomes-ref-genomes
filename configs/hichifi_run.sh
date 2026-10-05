@@ -136,7 +136,12 @@ bash "$REPO_DIR/scripts/01_stage_data/01_get_hic_from_config.sh" "$RENDERED_CONF
 # ────────────────────────────────────────────────────────────────────────────
 echo "=== [5/5] Running Nextflow ==="
 cd "$RUN_DIR"
-NF_LOG="$RUN_DIR/nextflow_$(date +%Y%m%d_%H%M%S).log"
+NF_TS="$(date +%Y%m%d_%H%M%S)"
+NF_LOG="$RUN_DIR/nextflow_${NF_TS}.log"
+# Per-run usage reports (trace columns are set in nextflow.config). native_id in
+# the trace is the SLURM job ID, for joining with sacct to calculate SU.
+NF_INFO_DIR="$RUN_DIR/pipeline_info"
+mkdir -p "$NF_INFO_DIR"
 
 set +e
 nextflow run "$REPO_DIR/main.nf" \
@@ -150,6 +155,9 @@ nextflow run "$REPO_DIR/main.nf" \
   --binddir "$BINDDIR" \
   -c "$REPO_DIR/pawsey_profile.config" \
   -resume \
+  -with-trace "$NF_INFO_DIR/execution_trace_${NF_TS}.txt" \
+  -with-report "$NF_INFO_DIR/execution_report_${NF_TS}.html" \
+  -with-timeline "$NF_INFO_DIR/execution_timeline_${NF_TS}.html" \
   --tempdir "$TEMPDIR" \
   --bs_config "$BS_CONFIG" \
   --sql_config "$SQL_CONFIG" \
