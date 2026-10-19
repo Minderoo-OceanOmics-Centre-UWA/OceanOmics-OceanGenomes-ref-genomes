@@ -1,0 +1,4 @@
+sample	k_mer_set	solid_k_mers	total_k_mers	completeness
+OG762_v241019.hic1.0.hifiasm.hap1	all	567850000	666370000	85.2146
+OG762_v241019.hic1.0.hifiasm.hap2	all	567540000	666370000	85.1683
+OG762_v241019.hic1.0.hifiasm.dual	all	640000000	666370000	96.0412

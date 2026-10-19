@@ -1,0 +1,37 @@
+sample	dataset	complete	single_copy	multi_copy	fragmented	missing	n_markers	internal_stop_codon_percent	scaffold_n50_bus	contigs_n50_bus	percent_gaps	number_of_scaffolds
+OG762_v241019.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	1.9	25826101	25826101	0.000%	157
+OG762_v241019.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	2.0	25615257	25615257	0.000%	191
+OG762_v241019.hic1.2.tiara.hap2_scaffolds.fa	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	1.9				
+OG762_v241019.hic1.2.tiara.hap1_scaffolds.fa	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	2.0				
+OG799_v241019.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.0	98.7	0.4	0.9	0.1	3640	1.9	29972743	29972743	0.000%	96
+OG799_v241019.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	1.8	29530291	29530291	0.000%	123
+OG799_v241019.hic1.2.tiara.hap2_scaffolds.fa	actinopterygii_odb10	99.0	98.7	0.4	0.9	0.1	3640	1.9				
+OG799_v241019.hic1.2.tiara.hap1_scaffolds.fa	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	1.8				
+OG85_v240927.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	2.1	20431561	20431561	0.000%	192
+OG85_v240927.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	2.0	24619442	24619442	0.000%	222
+OG649_v240417.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.1	98.9	0.2	0.7	0.1	3640	2.0	7162446	7162446	0.000%	332
+OG649_v240417.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.2	99.0	0.2	0.7	0.1	3640	1.9	6008001	6008001	0.000%	608
+OG799_v241019.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.0	98.7	0.4	0.9	0.1	3640	1.9	29972743	29972743	0.000%	96
+OG799_v241019.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	1.8	29530291	29530291	0.000%	123
+OG762_v241019.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	1.9	25826101	25826101	0.000%	157
+OG762_v241019.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	2.0	25615257	25615257	0.000%	191
+OG680_v241004.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	98.4	98.0	0.4	0.9	0.7	3640	1.9	8940483	8940483	0.000%	185
+OG680_v241004.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	98.4	98.0	0.4	0.9	0.7	3640	1.9	9981975	9981975	0.000%	201
+OG113_v231028.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	98.5	98.0	0.6	0.9	0.5	3640	2.3	24867135	24867135	0.000%	199
+OG113_v231028.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	98.5	97.8	0.7	0.9	0.6	3640	2.5	24459014	24459014	0.000%	265
+OG680_v241004.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	98.4	98.0	0.4	0.9	0.7	3640	1.9	8940483	8940483	0.000%	185
+OG680_v241004.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	98.4	98.0	0.4	0.9	0.7	3640	1.9	9981975	9981975	0.000%	201
+OG680_v241004.hic1.2.tiara.hap2_scaffolds.fa	actinopterygii_odb10	98.4	98.0	0.4	0.9	0.7	3640	1.9				
+OG680_v241004.hic1.2.tiara.hap1_scaffolds.fa	actinopterygii_odb10	98.4	98.0	0.4	0.9	0.7	3640	1.9				
+OG649_v240417.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.1	98.9	0.2	0.7	0.1	3640	2.0	7162446	7162446	0.000%	332
+OG649_v240417.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.2	99.0	0.2	0.7	0.1	3640	1.9	6008001	6008001	0.000%	608
+OG649_v240417.hic1.2.tiara.hap2_scaffolds.fa	actinopterygii_odb10	99.1	98.9	0.2	0.7	0.2	3640	2.0				
+OG649_v240417.hic1.2.tiara.hap1_scaffolds.fa	actinopterygii_odb10	99.2	99.0	0.2	0.7	0.1	3640	1.9				
+OG85_v240927.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	2.1	20431561	20431561	0.000%	192
+OG85_v240927.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	2.0	24619442	24619442	0.000%	222
+OG85_v240927.hic1.2.tiara.hap2_scaffolds.fa	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	2.1				
+OG85_v240927.hic1.2.tiara.hap1_scaffolds.fa	actinopterygii_odb10	99.0	98.7	0.3	0.9	0.1	3640	2.0				
+OG113_v231028.hic1.0.hifiasm.hap2.fasta	actinopterygii_odb10	98.5	98.0	0.6	0.9	0.5	3640	2.3	24867135	24867135	0.000%	199
+OG113_v231028.hic1.0.hifiasm.hap1.fasta	actinopterygii_odb10	98.5	97.8	0.7	0.9	0.6	3640	2.5	24459014	24459014	0.000%	265
+OG113_v231028.hic1.2.tiara.hap2_scaffolds.fa	actinopterygii_odb10	98.5	98.0	0.6	0.9	0.5	3640	2.3				
+OG113_v231028.hic1.2.tiara.hap1_scaffolds.fa	actinopterygii_odb10	98.5	97.8	0.7	0.9	0.6	3640	2.5				

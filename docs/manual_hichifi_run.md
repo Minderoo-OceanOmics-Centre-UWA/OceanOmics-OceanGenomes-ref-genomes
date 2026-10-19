@@ -192,7 +192,12 @@ bash ref-gen/OceanOmics-OceanGenomes-ref-genomes/configs/hichifi_run.sh -resume 
 
 - **Scratch:** `STAGING_BASE_DIR/<OG_ID>/` (Nextflow outputs)
 - **Acacia:** `pawsey0964:oceanomics-refassemblies/<OG>/<OG>_<date>.<version>/`
-- **Database:** `ref_genomes` table, upserted by the compile/push scripts
+- **Database:** on `master`, the `ref_genomes` table, upserted by the compile/push scripts. On the
+  `phase-rg-v4` branch (Phase RG, not yet deployed) the scripts write the relational tables instead
+  (`ref_assembly`, `ref_assembly_part` and one table per tool) through `scripts/lib/refdb.py`, one
+  transaction per file, exiting non-zero on any error. Until the RG.6 swap those tables exist only in
+  schema `v4`, so the branch must run with `PGOPTIONS='-c search_path=v4,public'`; with the default
+  `search_path` it fails rather than writing anywhere. Tests: `python -m unittest discover tests`.
 
 ---
 

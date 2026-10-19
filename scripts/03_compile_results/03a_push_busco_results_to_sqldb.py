@@ -7,6 +7,10 @@ import configparser
 import sys
 from pathlib import Path  # ✅ you used Path but didn't import it
 
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
+
 # -------------------------------
 # Load DB credentials from .cfg
 # -------------------------------
@@ -103,17 +107,15 @@ print("\n🔍 Final dataset summary:")
 print(busco.describe())
 
 # -------------------------------
-# DB upsert
+# DB write (Phase RG): one row per assembly, part and tool in ref_assembly, ref_assembly_part and
+# ref_busco, through scripts/lib/refdb.py. One transaction for the whole file; any error exits 1.
+# Table names are unqualified: search_path decides (v4 during the RG window, public after RG.6).
 # -------------------------------
-conn = None
-cursor = None
-try:
-    db_params = load_db_config(config_file)
-    conn = psycopg2.connect(**db_params)
-    cursor = conn.cursor()
+PART_KEY = ("og_id", "seq_date", "version", "stage", "haplotype")
 
-    row_count = 0
 
+def build_rows():
+    rows = []
     for _, row in busco.iterrows():
         og_id = row.get("og_id")
         if og_id not in version_map:
@@ -138,43 +140,9 @@ try:
             "percent_gaps": parse_float(row.get("percent_gaps")),
             "number_of_scaffolds": parse_int(row.get("number_of_scaffolds")),
         }
+        rows.append(({k: params[k] for k in PART_KEY},
+                     {k: v for k, v in params.items() if k not in PART_KEY}))
+    return rows
 
-        upsert_query = """
-        INSERT INTO ref_genomes (
-            og_id, seq_date, stage, haplotype, version, dataset, complete, single_copy, multi_copy, fragmented,
-            missing, n_markers, internal_stop_codon_percent, scaffold_n50_bus, contigs_n50_bus, percent_gaps, number_of_scaffolds
-        )
-        VALUES (
-            %(og_id)s, %(seq_date)s, %(stage)s, %(haplotype)s, %(version)s, %(dataset)s, %(complete)s, %(single_copy)s, %(multi_copy)s, %(fragmented)s,
-            %(missing)s, %(n_markers)s, %(internal_stop_codon_percent)s, %(scaffold_n50_bus)s, %(contigs_n50_bus)s, %(percent_gaps)s, %(number_of_scaffolds)s
-        )
-        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
-            dataset = EXCLUDED.dataset,
-            complete = EXCLUDED.complete,
-            single_copy = EXCLUDED.single_copy,
-            multi_copy = EXCLUDED.multi_copy,
-            fragmented = EXCLUDED.fragmented,
-            missing = EXCLUDED.missing,
-            n_markers = EXCLUDED.n_markers,
-            internal_stop_codon_percent = EXCLUDED.internal_stop_codon_percent,
-            scaffold_n50_bus = EXCLUDED.scaffold_n50_bus,
-            contigs_n50_bus = EXCLUDED.contigs_n50_bus,
-            percent_gaps = EXCLUDED.percent_gaps,
-            number_of_scaffolds = EXCLUDED.number_of_scaffolds;
-        """
 
-        cursor.execute(upsert_query, params)
-        row_count += 1
-        conn.commit()
-        print(f"✅ Successfully processed {row_count} rows!")
-
-except Exception as e:
-    if conn:
-        conn.rollback()
-    print(f"❌ Error: {e}")
-
-finally:
-    if cursor:
-        cursor.close()
-    if conn:
-        conn.close()
+refdb.main_guard(lambda: refdb.write_tool_rows(refdb.load_db_config(config_file), "ref_busco", build_rows()))

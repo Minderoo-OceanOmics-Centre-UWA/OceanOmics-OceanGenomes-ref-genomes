@@ -7,6 +7,10 @@ import configparser
 import sys
 from pathlib import Path  # ✅ you used Path but didn't import it
 
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
+
 # -------------------------------
 # Load DB credentials from .cfg
 # -------------------------------
@@ -103,17 +107,15 @@ print("\n🔍 Final dataset summary:")
 print(merqury.describe())
 
 # -------------------------------
-# DB upsert
+# DB write (Phase RG): one row per assembly, part and tool in ref_assembly, ref_assembly_part and
+# ref_merqury_completeness, through scripts/lib/refdb.py. One transaction for the whole file; any error exits 1.
+# Table names are unqualified: search_path decides (v4 during the RG window, public after RG.6).
 # -------------------------------
-conn = None
-cursor = None
-try:
-    db_params = load_db_config(config_file)
-    conn = psycopg2.connect(**db_params)
-    cursor = conn.cursor()
+PART_KEY = ("og_id", "seq_date", "version", "stage", "haplotype")
 
-    row_count = 0
 
+def build_rows():
+    rows = []
     for _, row in merqury.iterrows():
         og_id = row.get("og_id")
         if og_id not in version_map:
@@ -129,32 +131,9 @@ try:
             "total_k_mers": parse_int(row.get("total_k_mers")),  # BIGINT
             "completeness": parse_float(row.get("completeness")) # FLOAT
         }
+        rows.append(({k: params[k] for k in PART_KEY},
+                     {k: v for k, v in params.items() if k not in PART_KEY}))
+    return rows
 
-        upsert_query = """
-        INSERT INTO ref_genomes (
-            og_id, seq_date, stage, haplotype, version, solid_k_mers, total_k_mers, completeness
-        )
-        VALUES (
-            %(og_id)s, %(seq_date)s, %(stage)s, %(haplotype)s, %(version)s, %(solid_k_mers)s, %(total_k_mers)s, %(completeness)s
-        )
-        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
-            solid_k_mers = EXCLUDED.solid_k_mers,
-            total_k_mers = EXCLUDED.total_k_mers,
-            completeness = EXCLUDED.completeness;
-        """
 
-        cursor.execute(upsert_query, params)
-        row_count += 1
-        conn.commit()
-        print(f"✅ Successfully processed {row_count} rows!")
-
-except Exception as e:
-    if conn:
-        conn.rollback()
-    print(f"❌ Error: {e}")
-
-finally:
-    if cursor:
-        cursor.close()
-    if conn:
-        conn.close()
+refdb.main_guard(lambda: refdb.write_tool_rows(refdb.load_db_config(config_file), "ref_merqury_completeness", build_rows()))

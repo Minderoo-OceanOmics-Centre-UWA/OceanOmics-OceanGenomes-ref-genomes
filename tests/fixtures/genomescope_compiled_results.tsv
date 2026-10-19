@@ -1,0 +1,6 @@
+sample	homozygosity	heterozygosity	genomesize	repeatsize	uniquesize	modelfit	errorrate
+OG113_genomescope_summary.txt	99.3762%	0.639897%	823,456,968	263,875,244	559,581,724	95.6761%	0.229238%
+OG649_genomescope_summary.txt	100%	100%	248,872,285	22,355,678	226,516,607	88.1261%	0.825936%
+OG680_genomescope_summary.txt	99.3241%	0.704934%	456,146,256	40,404,814	415,741,442	90.7813%	0.171068%
+OG762_genomescope_summary.txt	98.8057%	1.20507%	608,471,764	61,376,529	547,095,235	97.1177%	0.150905%
+OG799_genomescope_summary.txt	98.0587%	1.95123%	725,662,703	101,767,509	623,895,194	97.429%	0.127746%

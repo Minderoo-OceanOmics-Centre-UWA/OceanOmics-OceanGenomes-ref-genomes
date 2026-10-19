@@ -30,20 +30,22 @@ conn = psycopg2.connect(
 )
 cur = conn.cursor()
 
+# Phase RG: one row per assembly and haplotype at its latest stage, from v_ref_assembly_summary
+# (unqualified: search_path decides, v4 during the RG window, public after RG.6).
 cur.execute("""
     SELECT
         og_id, seq_date, version, haplotype,
         num_scaffolds,
-        ROUND(scaffold_n50_size_mb::numeric, 2)         AS scaffold_n50_mb,
+        ROUND(scaffold_n50_size_mb::numeric, 2)          AS scaffold_n50_mb,
         ROUND(total_scaffold_length_size_mb::numeric, 2) AS total_len_mb,
         num_chromosomes,
         ROUND(pct_assigned::numeric, 1)                  AS pct_chr,
-        ROUND(single_copy::numeric, 1)                   AS busco_s,
+        ROUND(busco_single_copy::numeric, 1)             AS busco_s,
         ROUND(qv::numeric, 2)                            AS qv,
-        ROUND(completeness::numeric, 2)                  AS kmer_compl
-    FROM ref_genomes
+        ROUND(kmer_completeness::numeric, 2)             AS kmer_compl
+    FROM v_ref_assembly_summary
     WHERE og_id = ANY(%s)
-    ORDER BY og_id, seq_date DESC, haplotype
+    ORDER BY og_id, seq_date DESC, version, haplotype
 """, (og_ids,))
 rows = cur.fetchall()
 

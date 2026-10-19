@@ -14,8 +14,10 @@ from pathlib import Path
 import configparser
 import pandas as pd
 import numpy as np
-import psycopg2
-from psycopg2.extras import execute_values
+
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
 
 # SampleName format: OG58W_D2_SBL  →  og_id=OG58, tissue=W, ext_type=D2, lib_code=SBL
 SAMPLE_RE = re.compile(r'^(OG\d+)([A-Za-z]+)_([^_]+)_(.+)$')
@@ -174,39 +176,12 @@ def main():
     n_multi = sum(1 for _, grp in combined.groupby(KEY) if len(grp) > 1)
     print(f"\n{len(result_rows)} unique run×sample rows ({n_multi} merged from multiple SMRT cells)")
 
-    upsert_sql = """
-        INSERT INTO hifi_reads_qc (
-            og_id, tissue, ext_type, lib_code, run_id,
-            barcode, barcode_quality, hifi_reads, hifi_read_length,
-            hifi_read_quality, hifi_yield, polymerase_read_length
-        )
-        VALUES %s
-        ON CONFLICT (og_id, tissue, ext_type, lib_code, run_id) DO UPDATE SET
-            barcode                = EXCLUDED.barcode,
-            barcode_quality        = EXCLUDED.barcode_quality,
-            hifi_reads             = EXCLUDED.hifi_reads,
-            hifi_read_length       = EXCLUDED.hifi_read_length,
-            hifi_read_quality      = EXCLUDED.hifi_read_quality,
-            hifi_yield             = EXCLUDED.hifi_yield,
-            polymerase_read_length = EXCLUDED.polymerase_read_length;
-    """
-
-    conn = None
-    try:
-        db_params = load_db_config(config_file)
-        conn = psycopg2.connect(**db_params)
-        with conn, conn.cursor() as cur:
-            execute_values(cur, upsert_sql, result_rows, page_size=10_000)
-        print(f"✅ Successfully upserted {len(result_rows)} rows into hifi_reads_qc.")
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"❌ Error during upsert: {e}")
-        raise
-    finally:
-        if conn:
-            conn.close()
+    # Phase RG: hifi_read_qc, linked to the one sequencing row of this library on this run where
+    # exactly one matches (scripts/lib/refdb.py). One transaction; any error exits 1.
+    cols = refdb.HIFI_READ_QC_KEY + refdb.HIFI_READ_QC_COLS
+    refdb.write_hifi_read_qc_rows(refdb.load_db_config(config_file),
+                                  [dict(zip(cols, r)) for r in result_rows])
 
 
 if __name__ == "__main__":
-    main()
+    refdb.main_guard(main)

@@ -9,6 +9,10 @@ import configparser
 import sys
 from pathlib import Path
 
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
+
 
 def load_db_config(config_file):
     if not Path(config_file).exists():
@@ -98,43 +102,20 @@ gfa[["og_id", "seq_date", "version", "stage", "haplotype"]] = gfa["filename"].ap
 print("\n🔍 Parsed rows:")
 print(gfa[["filename", "og_id", "seq_date", "version", "stage", "haplotype"]].to_string(index=False))
 
-conn = cursor = None
-try:
-    conn   = psycopg2.connect(**load_db_config(config_file))
-    cursor = conn.cursor()
+# -------------------------------
+# DB write (Phase RG): one row per assembly, part and tool in ref_assembly, ref_assembly_part and
+# ref_gfastats, through scripts/lib/refdb.py. One transaction for the whole file; any error exits 1.
+# Table names are unqualified: search_path decides (v4 during the RG window, public after RG.6).
+# -------------------------------
+PART_KEY = ("og_id", "seq_date", "version", "stage", "haplotype")
 
-    upsert_query = """
-    INSERT INTO ref_genomes (
-        og_id, seq_date, version, stage, haplotype,
-        num_contigs, contig_n50, contig_n50_size_mb,
-        num_scaffolds, scaffold_n50, scaffold_n50_size_mb,
-        largest_scaffold, largest_scaffold_size_mb,
-        total_scaffold_length, total_scaffold_length_size_mb,
-        gc_content_percent
-    )
-    VALUES (
-        %(og_id)s, %(seq_date)s, %(version)s, %(stage)s, %(haplotype)s,
-        %(num_contigs)s, %(contig_n50)s, %(contig_n50_size_mb)s,
-        %(num_scaffolds)s, %(scaffold_n50)s, %(scaffold_n50_size_mb)s,
-        %(largest_scaffold)s, %(largest_scaffold_size_mb)s,
-        %(total_scaffold_length)s, %(total_scaffold_length_size_mb)s,
-        %(gc_content_percent)s
-    )
-    ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
-        num_contigs                  = EXCLUDED.num_contigs,
-        contig_n50                   = EXCLUDED.contig_n50,
-        contig_n50_size_mb           = EXCLUDED.contig_n50_size_mb,
-        num_scaffolds                = EXCLUDED.num_scaffolds,
-        scaffold_n50                 = EXCLUDED.scaffold_n50,
-        scaffold_n50_size_mb         = EXCLUDED.scaffold_n50_size_mb,
-        largest_scaffold             = EXCLUDED.largest_scaffold,
-        largest_scaffold_size_mb     = EXCLUDED.largest_scaffold_size_mb,
-        total_scaffold_length        = EXCLUDED.total_scaffold_length,
-        total_scaffold_length_size_mb = EXCLUDED.total_scaffold_length_size_mb,
-        gc_content_percent           = EXCLUDED.gc_content_percent;
-    """
 
+def build_rows():
+    rows = []
     for i, row in gfa.iterrows():
+        if row.get("og_id") == "OG90_bc2008":
+            print("⏭️  Skipping OG90_bc2008: excluded barcode variant (Phase RG triage, RG.0 §3)")
+            continue
         params = {
             "og_id":     row.get("og_id"),
             "seq_date":  row.get("seq_date"),
@@ -153,14 +134,9 @@ try:
             "total_scaffold_length_size_mb":  parse_float(row.get("total_scaffold_length_size_mb")),
             "gc_content_percent":             parse_float(row.get("gc_content_percent")),
         }
-        cursor.execute(upsert_query, params)
-        conn.commit()
-        print(f"✅ Upserted: {params['og_id']} {params['seq_date']} version={params['version']} stage={params['stage']} haplotype={params['haplotype']}")
+        rows.append(({k: params[k] for k in PART_KEY},
+                     {k: v for k, v in params.items() if k not in PART_KEY}))
+    return rows
 
-except Exception as e:
-    if conn:
-        conn.rollback()
-    print(f"❌ Error: {e}")
-finally:
-    if cursor: cursor.close()
-    if conn:   conn.close()
+
+refdb.main_guard(lambda: refdb.write_tool_rows(refdb.load_db_config(config_file), "ref_gfastats", build_rows()))

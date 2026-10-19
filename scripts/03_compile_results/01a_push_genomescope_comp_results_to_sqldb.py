@@ -11,6 +11,10 @@ import configparser
 import sys
 from pathlib import Path
 
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
+
 # -------------------------------
 # Load DB credentials from .cfg
 # -------------------------------
@@ -109,15 +113,18 @@ print("\n🔍 Final dataset summary:")
 print(genomescope.describe())
 # print(genomescope.columns)  # keep if you want
 
-conn = None
-cursor = None
-try:
-    db_params = load_db_config(config_file)
-    conn = psycopg2.connect(**db_params)
-    cursor = conn.cursor()
+# -------------------------------
+# DB write (Phase RG): ref_genomescope, one row per HiFi read set (og_id, seq_date), through
+# scripts/lib/refdb.py. seq_date comes from the samplesheet's date column (vYYMMDD); without a
+# samplesheet it is NULL, "read set unknown", as for every row from before Phase RG.
+# One transaction for the whole file; any error exits 1.
+# -------------------------------
+date_map = {og.split("_")[0]: d.lstrip("v")
+            for og, d in refdb.load_samplesheet(samplesheet, "date").items()} if samplesheet else {}
 
-    row_count = 0
 
+def build_rows():
+    rows = []
     for _, row in genomescope.iterrows():
         og_id = row["og_id"]
         homozygosity = parse_num(row.get("homozygosity"), int_like=False)
@@ -141,38 +148,8 @@ try:
             "modelfit": parse_num(row.get("modelfit"), int_like=False),
             "errorrate": parse_num(row.get("errorrate"), int_like=False),
         }
+        rows.append((og_id, date_map.get(og_id), {k: v for k, v in params.items() if k != "og_id"}))
+    return rows
 
-        upsert_query = """
-        INSERT INTO raw_qc (
-            og_id, homozygosity, heterozygosity, genomesize,
-            repeatsize, uniquesize, modelfit, errorrate
-        )
-        VALUES (
-            %(og_id)s, %(homozygosity)s, %(heterozygosity)s, %(genomesize)s,
-            %(repeatsize)s, %(uniquesize)s, %(modelfit)s, %(errorrate)s
-        )
-        ON CONFLICT (og_id) DO UPDATE SET
-            homozygosity = EXCLUDED.homozygosity,
-            heterozygosity = EXCLUDED.heterozygosity,
-            genomesize = EXCLUDED.genomesize,
-            repeatsize = EXCLUDED.repeatsize,
-            uniquesize = EXCLUDED.uniquesize,
-            modelfit = EXCLUDED.modelfit,
-            errorrate = EXCLUDED.errorrate;
-        """
 
-        cursor.execute(upsert_query, params)
-        row_count += 1
-        conn.commit()
-        print(f"✅ Successfully processed {row_count} rows!")
-
-except Exception as e:
-    if conn:
-        conn.rollback()
-    print(f"❌ Error: {e}")
-
-finally:
-    if cursor:
-        cursor.close()
-    if conn:
-        conn.close()
+refdb.main_guard(lambda: refdb.write_read_set_rows(refdb.load_db_config(config_file), "ref_genomescope", build_rows()))

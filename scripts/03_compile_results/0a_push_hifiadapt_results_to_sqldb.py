@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-# singularity run $SING/psycopg2:0.1.sif python 0a_push_hifiadapt_results_to_sqldb.py ~/postgresql_details/oceanomics.cfg
+# singularity run $SING/psycopg2:0.1.sif python 0a_push_hifiadapt_results_to_sqldb.py ~/postgresql_details/oceanomics.cfg [samplesheet.csv]
 import sys
 from pathlib import Path
 import configparser
 import pandas as pd
 import numpy as np
-import psycopg2
-from psycopg2.extras import execute_values
+
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
 
 def load_db_config(config_file: str) -> dict:
     p = Path(config_file)
@@ -46,8 +48,9 @@ def clean_hifiadapt(df: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     if len(sys.argv) < 2:
-        sys.exit("Usage: 0a_push_hifiadapt_results_to_sqldb.py /path/to/oceanomics.cfg")
+        sys.exit("Usage: 0a_push_hifiadapt_results_to_sqldb.py /path/to/oceanomics.cfg [samplesheet.csv]")
     config_file = sys.argv[1]
+    samplesheet = sys.argv[2] if len(sys.argv) > 2 else None
     tsv = "hifiadaptorfilt_stats_summary.tsv"
 
     print(f"Importing data from {tsv}")
@@ -59,35 +62,17 @@ def main():
     print(df.describe(include='all'))
     print(df.columns.tolist())
 
-    rows = list(df.itertuples(index=False, name=None))
+    # Phase RG: ref_hifi_adapter_filter, one row per HiFi read set (og_id, seq_date). seq_date comes
+    # from the samplesheet's date column (vYYMMDD); without one it is NULL, "read set unknown".
+    date_map = {og.split("_")[0]: d.lstrip("v")
+                for og, d in refdb.load_samplesheet(samplesheet, "date").items()}
+    rows = [(og_id, date_map.get(og_id), {"contam_reads": refdb.parse_int(contam_reads)})
+            for og_id, contam_reads in df.itertuples(index=False, name=None)]
     if not rows:
         print("No rows to upsert. Exiting.")
         return
+    refdb.write_read_set_rows(refdb.load_db_config(config_file), "ref_hifi_adapter_filter", rows)
 
-    upsert_sql = """
-        INSERT INTO raw_qc (og_id, contam_reads)
-        VALUES %s
-        ON CONFLICT (og_id) DO UPDATE
-        SET contam_reads = EXCLUDED.contam_reads;
-    """
-
-    conn = None
-    try:
-        db_params = load_db_config(config_file)
-        conn = psycopg2.connect(**db_params)
-        with conn, conn.cursor() as cur:
-            # Ensure unique index exists (safe if already present)
-            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS raw_qc_og_id_uq ON raw_qc(og_id);")
-            execute_values(cur, upsert_sql, rows, page_size=10_000)
-        print(f"✅ Successfully upserted {len(rows)} rows into raw_qc.")
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"❌ Error during upsert: {e}")
-        raise
-    finally:
-        if conn:
-            conn.close()
 
 if __name__ == "__main__":
-    main()
+    refdb.main_guard(main)
