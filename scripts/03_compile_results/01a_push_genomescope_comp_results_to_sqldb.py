@@ -114,9 +114,9 @@ print(genomescope.describe())
 # print(genomescope.columns)  # keep if you want
 
 # -------------------------------
-# DB write (Phase RG): ref_genomescope, one row per HiFi read set (og_id, seq_date), through
-# scripts/lib/refdb.py. seq_date comes from the samplesheet's date column (vYYMMDD); without a
-# samplesheet it is NULL, "read set unknown", as for every row from before Phase RG.
+# DB write (Phase RG): ref_genomescope, one row per HiFi read set (ref_read_set, migration 062),
+# through scripts/lib/refdb.py. The read set comes from the samplesheet's date column (vYYMMDD) and
+# its PacBio runs; the samplesheet is required for the write, and an OG without a date fails the file.
 # One transaction for the whole file; any error exits 1.
 # -------------------------------
 date_map = {og.split("_")[0]: d.lstrip("v")

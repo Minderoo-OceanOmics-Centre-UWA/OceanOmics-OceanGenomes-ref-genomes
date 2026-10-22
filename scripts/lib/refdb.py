@@ -227,11 +227,48 @@ def upsert_metrics(cur, table, key, values):
 
 # -- read sets and read QC ------------------------------------------------------------------------
 
-def upsert_read_set(cur, table, og_id, seq_date, values):
-    """GenomeScope / HiFiAdapterFilt for one HiFi read set, keyed (og_id, seq_date).
+# A samplesheet date can be the PacBio movie date, up to ~10 days off the run's seq_date (OG16:
+# v240417, run PACB_240427_LA). Migration 062 dated the backfilled read sets with the same rule.
+READ_SET_WINDOW_DAYS = 21
 
-    seq_date None means "read set unknown" (rows from before Phase RG). All-None values remove the
-    row. Returns 'upserted', 'deleted' or 'unchanged'.
+
+def read_set_runs(cur, og_id, sheet_date):
+    """The OG's PacBio DNA sequencing rows a samplesheet date covers: every run up to the date plus
+    READ_SET_WINDOW_DAYS. Returns (read set seq_date, [sequencing_id]). The read set's seq_date is
+    the latest seq_date among them, or the samplesheet date when the OG has none (external reads),
+    which v4.v_read_set_run_readiness then lists."""
+    cur.execute(
+        "SELECT s.sequencing_id, s.seq_date FROM v_sequencing_browse s "
+        "WHERE s.og_id = %s AND s.technology IN ('PacBio HIFI', 'PacBio') AND s.library_type = 'pacbio' "
+        "AND s.seq_date ~ '^[0-9]{6}$' "
+        "AND to_date(s.seq_date, 'YYMMDD') <= to_date(%s, 'YYMMDD') + %s "
+        "ORDER BY s.seq_date, s.sequencing_id",
+        (og_id, sheet_date, READ_SET_WINDOW_DAYS))
+    runs = cur.fetchall() or []
+    return max((d for _, d in runs), default=sheet_date), [sid for sid, _ in runs]
+
+
+def ensure_read_set(cur, og_id, sheet_date):
+    """read_set_id for (og_id, samplesheet date), created if missing, with its runs linked."""
+    seq_date, runs = read_set_runs(cur, og_id, sheet_date)
+    cur.execute(
+        "INSERT INTO ref_read_set (og_id, seq_date) VALUES (%s, %s) "
+        "ON CONFLICT (og_id, (coalesce(seq_date, ''))) DO UPDATE SET og_id = EXCLUDED.og_id "
+        "RETURNING read_set_id",
+        (og_id, seq_date))
+    read_set_id = cur.fetchone()[0]
+    for sid in runs:
+        cur.execute("INSERT INTO ref_read_set_run (read_set_id, sequencing_id) VALUES (%s, %s) "
+                    "ON CONFLICT DO NOTHING", (read_set_id, sid))
+    return read_set_id
+
+
+def upsert_read_set(cur, table, og_id, seq_date, values):
+    """GenomeScope / HiFiAdapterFilt for one HiFi read set (v4.ref_read_set, migration 062).
+
+    seq_date is the samplesheet's date (YYMMDD) and is required: a result whose reads are unknown is
+    not written. All-None values remove the tool row, and the read set too once no tool row is left.
+    Returns 'upserted', 'deleted' or 'unchanged'.
     """
     if table not in READ_SET_TABLES:
         raise ValueError(f"{table} is not a read-set table")
@@ -241,20 +278,31 @@ def upsert_read_set(cur, table, og_id, seq_date, values):
     og_id, seq_date = clean(og_id), clean(seq_date)
     if not og_id or not str(og_id).startswith("OG"):
         raise ValueError(f"bad og_id {og_id!r}")
-    if seq_date is not None and not SEQ_DATE_RE.match(str(seq_date)):
-        raise ValueError(f"bad seq_date {seq_date!r} for {og_id} (want YYMMDD or None)")
+    if seq_date is None:
+        raise ValueError(f"no samplesheet date for {og_id}: pass the samplesheet so the read set is known")
+    if not SEQ_DATE_RE.match(str(seq_date)):
+        raise ValueError(f"bad seq_date {seq_date!r} for {og_id} (want YYMMDD)")
+    seq_date = str(seq_date)
     vals = {c: clean(v) for c, v in values.items()}
     if all(v is None for v in vals.values()):
-        cur.execute(f"DELETE FROM {table} WHERE og_id = %s AND coalesce(seq_date, '') = coalesce(%s, '')",
-                    (og_id, seq_date))
-        return "deleted" if cur.rowcount else "unchanged"
+        key, _ = read_set_runs(cur, og_id, seq_date)
+        cur.execute(f"DELETE FROM {table} t USING ref_read_set rs "
+                    f"WHERE t.read_set_id = rs.read_set_id AND rs.og_id = %s AND rs.seq_date = %s",
+                    (og_id, key))
+        deleted = cur.rowcount
+        cur.execute("DELETE FROM ref_read_set rs WHERE rs.og_id = %s AND rs.seq_date = %s "
+                    "AND NOT EXISTS (SELECT 1 FROM ref_genomescope g WHERE g.read_set_id = rs.read_set_id) "
+                    "AND NOT EXISTS (SELECT 1 FROM ref_hifi_adapter_filter f WHERE f.read_set_id = rs.read_set_id)",
+                    (og_id, key))
+        return "deleted" if deleted else "unchanged"
+    read_set_id = ensure_read_set(cur, og_id, seq_date)
     cols = list(vals)
     cur.execute(
-        f"INSERT INTO {table} (og_id, seq_date, {', '.join(cols)}) "
-        f"VALUES (%(og_id)s, %(seq_date)s, {', '.join('%(' + c + ')s' for c in cols)}) "
-        f"ON CONFLICT (og_id, (coalesce(seq_date, ''))) DO UPDATE SET "
+        f"INSERT INTO {table} (read_set_id, {', '.join(cols)}) "
+        f"VALUES (%(read_set_id)s, {', '.join('%(' + c + ')s' for c in cols)}) "
+        f"ON CONFLICT (read_set_id) DO UPDATE SET "
         f"{', '.join(f'{c} = EXCLUDED.{c}' for c in cols)}, loaded_at = now()",
-        dict(vals, og_id=og_id, seq_date=seq_date))
+        dict(vals, read_set_id=read_set_id))
     return "upserted"
 
 
@@ -313,7 +361,8 @@ def write_tool_rows(db_params, table, rows):
 
 
 def write_read_set_rows(db_params, table, rows):
-    """rows: iterable of (og_id, seq_date, values dict)."""
+    """rows: iterable of (og_id, samplesheet date YYMMDD, values dict). One transaction; a row with
+    no date fails the whole file."""
     rows = list(rows)
 
     def writes(cur):

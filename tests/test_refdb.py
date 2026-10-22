@@ -98,18 +98,37 @@ class UpsertMetrics(unittest.TestCase):
 
 
 class ReadSets(unittest.TestCase):
-    def test_unknown_read_set_conflicts_on_coalesce(self):
-        conn = FakeConn()
-        refdb.upsert_read_set(conn.cursor(), "ref_genomescope", "OG762", None, {"genomesize": 6})
-        sql = conn.sql_matching("INSERT INTO ref_genomescope")[0]
-        self.assertIn("ON CONFLICT (og_id, (coalesce(seq_date, '')))", sql)
-        self.assertIsNone(conn.inserts("ref_genomescope")[0]["seq_date"])
+    def test_sheet_date_resolves_to_runs_and_their_latest_seq_date(self):
+        # OG16: the samplesheet says v240417 (movie date); the run is PACB_240427_LA.
+        conn = FakeConn(pacbio_rows={"OG16": [("OG16G_D_SBL_PACB_240427_LA", "240427")]})
+        refdb.upsert_read_set(conn.cursor(), "ref_genomescope", "OG16", "240417", {"genomesize": 6})
+        rs = [p for s, p in conn.statements if s.startswith("INSERT INTO ref_read_set (")]
+        self.assertEqual(rs, [("OG16", "240427")])
+        runs = [p for s, p in conn.statements if s.startswith("INSERT INTO ref_read_set_run")]
+        self.assertEqual(runs, [(101, "OG16G_D_SBL_PACB_240427_LA")])
+        self.assertEqual(conn.inserts("ref_genomescope")[0]["read_set_id"], 101)
+        self.assertIn("ON CONFLICT (read_set_id)", conn.sql_matching("INSERT INTO ref_genomescope")[0])
 
-    def test_all_none_deletes_that_read_set(self):
-        conn = FakeConn(delete_rowcount=1)
-        out = refdb.upsert_read_set(conn.cursor(), "ref_hifi_adapter_filter", "OG762", "241018", {"contam_reads": None})
+    def test_no_pacbio_rows_keeps_the_sheet_date(self):
+        conn = FakeConn()
+        refdb.upsert_read_set(conn.cursor(), "ref_hifi_adapter_filter", "OG906", "250212", {"contam_reads": 0})
+        rs = [p for s, p in conn.statements if s.startswith("INSERT INTO ref_read_set (")]
+        self.assertEqual(rs, [("OG906", "250212")])
+        self.assertFalse(conn.sql_matching("INSERT INTO ref_read_set_run"))
+
+    def test_missing_date_rejected_before_any_write(self):
+        conn = FakeConn()
+        with self.assertRaises(ValueError):
+            refdb.upsert_read_set(conn.cursor(), "ref_genomescope", "OG762", None, {"genomesize": 6})
+        self.assertEqual(conn.statements, [])
+
+    def test_all_none_deletes_tool_row_then_empty_read_set(self):
+        conn = FakeConn(delete_rowcount=1, pacbio_rows={"OG762": [("OG762H_D_SBL_PACB_241018_LA", "241018")]})
+        out = refdb.upsert_read_set(conn.cursor(), "ref_hifi_adapter_filter", "OG762", "241019", {"contam_reads": None})
         self.assertEqual(out, "deleted")
         self.assertTrue(conn.sql_matching("DELETE FROM ref_hifi_adapter_filter"))
+        self.assertTrue(conn.sql_matching("DELETE FROM ref_read_set rs"))
+        self.assertFalse(conn.sql_matching("INSERT INTO"))
 
     def test_bad_seq_date_rejected(self):
         with self.assertRaises(ValueError):

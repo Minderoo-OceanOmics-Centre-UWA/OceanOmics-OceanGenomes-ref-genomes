@@ -62,8 +62,9 @@ def main():
     print(df.describe(include='all'))
     print(df.columns.tolist())
 
-    # Phase RG: ref_hifi_adapter_filter, one row per HiFi read set (og_id, seq_date). seq_date comes
-    # from the samplesheet's date column (vYYMMDD); without one it is NULL, "read set unknown".
+    # Phase RG: ref_hifi_adapter_filter, one row per HiFi read set (ref_read_set, migration 062). The
+    # read set comes from the samplesheet's date column (vYYMMDD) and its PacBio runs; without a
+    # samplesheet the read set is unknown and the write fails.
     date_map = {og.split("_")[0]: d.lstrip("v")
                 for og, d in refdb.load_samplesheet(samplesheet, "date").items()}
     rows = [(og_id, date_map.get(og_id), {"contam_reads": refdb.parse_int(contam_reads)})

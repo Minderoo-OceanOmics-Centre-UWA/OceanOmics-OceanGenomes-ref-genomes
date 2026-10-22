@@ -10,6 +10,7 @@ class FakeCursor:
         self.conn = conn
         self.rowcount = 0
         self._result = None
+        self._rows = []
 
     def execute(self, sql, params=None):
         flat = " ".join(sql.split())
@@ -22,6 +23,8 @@ class FakeCursor:
             self._result = (self.conn.next_id,)
         elif up.startswith("SELECT P.PART_ID"):
             self._result = self.conn.existing_part
+        elif up.startswith("SELECT S.SEQUENCING_ID, S.SEQ_DATE FROM V_SEQUENCING_BROWSE"):
+            self._rows = list(self.conn.pacbio_rows.get(params[0], []))
         elif up.startswith("DELETE"):
             self.rowcount = self.conn.delete_rowcount
         else:
@@ -29,6 +32,9 @@ class FakeCursor:
 
     def fetchone(self):
         return self._result
+
+    def fetchall(self):
+        return self._rows
 
     def __enter__(self):
         return self
@@ -38,7 +44,7 @@ class FakeCursor:
 
 
 class FakeConn:
-    def __init__(self, existing_part=None, delete_rowcount=1, fail_on=None):
+    def __init__(self, existing_part=None, delete_rowcount=1, fail_on=None, pacbio_rows=None):
         self.statements = []
         self.commits = 0
         self.rollbacks = 0
@@ -47,6 +53,7 @@ class FakeConn:
         self.existing_part = existing_part      # (part_id, assembly_id) returned by find_part
         self.delete_rowcount = delete_rowcount
         self.fail_on = fail_on                  # substring of SQL that raises
+        self.pacbio_rows = pacbio_rows or {}    # og_id -> [(sequencing_id, seq_date)] for read sets
 
     def cursor(self):
         return FakeCursor(self)

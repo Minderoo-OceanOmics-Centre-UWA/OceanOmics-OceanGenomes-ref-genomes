@@ -119,21 +119,28 @@ class ReadLevel(PushScriptCase):
         conn, code, out = self.run_script(COMPILE / "01a_push_genomescope_comp_results_to_sqldb.py",
                                           ["genomescope_compiled_results.tsv"], ["{fx}/samplesheet.csv"])
         self.assert_one_commit(conn, code, out)
-        rows = {p["og_id"]: p for p in conn.inserts("ref_genomescope")}
-        self.assertEqual(rows["OG762"]["seq_date"], "241019")
-        self.assertEqual(rows["OG113"]["homozygosity"], 99.3762)
-        self.assertEqual(rows["OG113"]["genomesize"], 823456968)
+        # The fake has no PacBio rows, so each read set keeps its samplesheet date.
+        read_sets = dict(p for s, p in conn.statements if s.startswith("INSERT INTO ref_read_set ("))
+        self.assertEqual(read_sets["OG762"], "241019")
+        rows = conn.inserts("ref_genomescope")
+        self.assertEqual(len(rows), len(read_sets))
+        self.assertIn(99.3762, {r["homozygosity"] for r in rows})
+        self.assertIn(823456968, {r["genomesize"] for r in rows})
 
-    def test_adapter_filter_with_and_without_samplesheet(self):
+    def test_adapter_filter_needs_the_samplesheet(self):
         conn, code, out = self.run_script(COMPILE / "0a_push_hifiadapt_results_to_sqldb.py",
                                           ["hifiadaptorfilt_stats_summary.tsv"], ["{fx}/samplesheet.csv"])
         self.assert_one_commit(conn, code, out)
-        self.assertEqual({p["seq_date"] for p in conn.inserts("ref_hifi_adapter_filter")},
+        self.assertEqual({p[1] for s, p in conn.statements if s.startswith("INSERT INTO ref_read_set (")},
                          {"241019", "231028", "240417", "241004"})
+        self.assertEqual(len(conn.inserts("ref_hifi_adapter_filter")),
+                         len(conn.sql_matching("INSERT INTO ref_read_set (")))
+        # Without a samplesheet the read set is unknown: nothing is written and the script fails.
         conn, code, out = self.run_script(COMPILE / "0a_push_hifiadapt_results_to_sqldb.py",
                                           ["hifiadaptorfilt_stats_summary.tsv"])
-        self.assert_one_commit(conn, code, out)
-        self.assertEqual({p["seq_date"] for p in conn.inserts("ref_hifi_adapter_filter")}, {None})
+        self.assertNotEqual(code, 0)
+        self.assertEqual(conn.commits, 0)
+        self.assertIn("no samplesheet date", out)
 
     def test_hifi_yield_sums_smrt_cells(self):
         conn, code, out = self.run_script(COMPILE / "0b_push_hifi_yield_results_to_sqldb.py",
