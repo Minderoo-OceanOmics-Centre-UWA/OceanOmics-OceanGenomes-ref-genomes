@@ -121,10 +121,11 @@ latest_seq AS (
   SELECT DISTINCT ON (seq.og_id)
          seq.og_id,
          seq.seq_date::date AS seq_date
-  FROM sequencing seq
+  FROM v_sequencing_browse seq  -- sequencing has no og_id since the v2 cutover (2026-10-13)
   JOIN p ON seq.og_id = p.og_id
   WHERE seq.technology IN ('PacBio HIFI', 'PacBio')
     AND seq.status IS DISTINCT FROM 'Failed'  -- a failed run is not the read set's date (migration 069)
+    AND seq.seq_date ~ '^[0-9]{{6}}$'  -- a malformed date would stop the ::date cast
   ORDER BY seq.og_id, seq.seq_date DESC
 ),
 smp AS (
