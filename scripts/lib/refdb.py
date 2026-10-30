@@ -240,6 +240,7 @@ def read_set_runs(cur, og_id, sheet_date):
     cur.execute(
         "SELECT s.sequencing_id, s.seq_date FROM v_sequencing_browse s "
         "WHERE s.og_id = %s AND s.technology IN ('PacBio HIFI', 'PacBio') AND s.library_type = 'pacbio' "
+        "AND s.status IS DISTINCT FROM 'Failed' "  # a failed run has no reads (migration 069)
         "AND s.seq_date ~ '^[0-9]{6}$' "
         "AND to_date(s.seq_date, 'YYMMDD') <= to_date(%s, 'YYMMDD') + %s "
         "ORDER BY s.seq_date, s.sequencing_id",

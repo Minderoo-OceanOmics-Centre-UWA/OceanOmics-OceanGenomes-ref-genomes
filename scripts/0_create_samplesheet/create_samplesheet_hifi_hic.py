@@ -161,6 +161,7 @@ latest_seq AS (
   FROM sequencing seq
   JOIN p ON seq.og_id = p.og_id
   WHERE seq.technology IN ('PacBio HIFI', 'PacBio')
+    AND seq.status IS DISTINCT FROM 'Failed'  -- a failed run is not the read set's date (migration 069)
   ORDER BY seq.og_id, seq.seq_date DESC
 ),
 smp AS (
