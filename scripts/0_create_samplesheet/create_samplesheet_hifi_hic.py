@@ -158,7 +158,7 @@ latest_seq AS (
   SELECT DISTINCT ON (seq.og_id)
          seq.og_id,
          seq.seq_date::date AS seq_date
-  FROM sequencing seq
+  FROM v_sequencing_browse seq
   JOIN p ON seq.og_id = p.og_id
   WHERE seq.technology IN ('PacBio HIFI', 'PacBio')
   ORDER BY seq.og_id, seq.seq_date DESC
