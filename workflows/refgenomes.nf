@@ -56,6 +56,7 @@ include { paramsSummaryMap                               } from 'plugin/nf-valid
 include { paramsSummaryMultiqc                           } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML                         } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText                         } from '../subworkflows/local/utils_oceangenomesrefgenomes_pipeline'
+include { databaseVersionsToYAML                         } from '../subworkflows/local/utils_oceangenomesrefgenomes_pipeline'
 include { CAT_HIFI                                      } from '../modules/local/cat_hifi/main'
 
 /*
@@ -202,6 +203,7 @@ workflow REFGENOMES {
 
     CAT_HIFI (
         HIFIADAPTERFILT.out.reads)
+    ch_versions = ch_versions.mix(CAT_HIFI.out.versions.first())
 
 
     //
@@ -249,6 +251,7 @@ workflow REFGENOMES {
             HIFIADAPTERFILT.out.reads,
             "0.hifiasm"
         )
+        ch_versions = ch_versions.mix(HIFIASM_SOLO.out.versions.first())
 
         //
         // MODULE: gfa stats primary and alternate
@@ -300,6 +303,7 @@ workflow REFGENOMES {
         CAT_HIC (
             ch_hic
         )
+        ch_versions = ch_versions.mix(CAT_HIC.out.versions.first())
 
 
     //
@@ -402,7 +406,7 @@ workflow REFGENOMES {
         params.buscomode,
         params.buscodb
     )
-    ch_versions = ch_versions.mix(SINGLE_HAPLOTYPE.out.versions.first())
+    ch_versions = ch_versions.mix(SINGLE_HAPLOTYPE.out.versions)
 
     //
     // Dual-haplotype pipeline: HIFIASM samples + dual-precomputed assembly samples
@@ -543,7 +547,7 @@ workflow REFGENOMES {
         ch_hap2_contigs,  // Add HIFIASM contigs for SALSA
         params.scaffolder  // 'yahs' or 'salsa'
     )
-    ch_versions = ch_versions.mix(SCAFFOLDING.out.versions.first())
+    ch_versions = ch_versions.mix(SCAFFOLDING.out.versions)
 
     //
     // SUBWORKFLOW: Run decontamination pipeline
@@ -554,7 +558,7 @@ workflow REFGENOMES {
         params.gxdb,
         scaffolder_suffix
     )
-    ch_versions = ch_versions.mix(DECONTAMINATION.out.versions.first())
+    ch_versions = ch_versions.mix(DECONTAMINATION.out.versions)
 
     
     //
@@ -670,6 +674,7 @@ workflow REFGENOMES {
         false,
         false
     )
+    ch_versions = ch_versions.mix(TELO_FINDER.out.versions)
 
     // Prepare telomere channel for PretextGraph
     ch_telomere_for_pretext = TELO_FINDER.out.bedgraph_file
@@ -691,7 +696,7 @@ workflow REFGENOMES {
     COVERAGE_TRACKS (
         ch_coverage_tracks_in
     )
-    ch_versions = ch_versions.mix(COVERAGE_TRACKS.out.versions.first())
+    ch_versions = ch_versions.mix(COVERAGE_TRACKS.out.versions)
 
 
     
@@ -753,13 +758,13 @@ workflow REFGENOMES {
                     "hap2",
                     "2.tiara")
     
-    ch_versions = ch_versions.mix(PRETEXTMAP_HAP_1.out.versions.first())
+    ch_versions = ch_versions.mix(PRETEXTMAP_HAP_2.out.versions.first())
     
     PRETEXTMAP_DUAL_HAP (OMNIC_DUAL_HAP.out.omnic_bam, 
                     "dual",
                     "2.tiara")
     
-    ch_versions = ch_versions.mix(PRETEXTMAP_HAP_1.out.versions.first())
+    ch_versions = ch_versions.mix(PRETEXTMAP_DUAL_HAP.out.versions.first())
 
 
     PRETEXTMAP_HIGH_RES (OMNIC_DUAL_HAP.out.omnic_bam, 
@@ -816,6 +821,7 @@ workflow REFGENOMES {
     // Collate and save software versions
     //
     softwareVersionsToYAML(ch_versions)
+        .mix(Channel.of(databaseVersionsToYAML()).filter { yaml -> yaml })
         .collectFile(storeDir: "${params.outdir}/pipeline_info", name: 'nf_core_pipeline_software_mqc_versions.yml', sort: true, newLine: true)
         .set { ch_collated_versions }
 

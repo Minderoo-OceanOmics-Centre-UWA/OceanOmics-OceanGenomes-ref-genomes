@@ -132,9 +132,18 @@ workflow TELO_FINDER {
         ch_telo_bedfiles.filter{ _meta, _file -> val_run_bgzip}
     )
 
+    //
+    // LOGIC: CONVERT (process, tool, version) TUPLES INTO versions.yml-STYLE YAML
+    //
+    ch_versions = TELOMERE_REGIONS.out.versions_telomereregions.first()
+        .mix(TELOMERE_WINDOWS.out.versions_telomerewindows.first())
+        .mix(TELOMERE_EXTRACT.out.versions_telomereextract.first())
+        .map { process, tool, version -> "\"${process}\":\n    ${tool}: ${version}" }
+
     emit:
     bed_file        = ch_telo_bedfiles          // Channel [meta, bed]
     bed_gz_tbi      = TABIX_BGZIPTABIX.out.gz_index  // Not used anymore
     bedgraph_file   = ch_telo_bedgraphs         // Channel [meta, [bedfiles]] - Used in pretext_graph
+    versions        = ch_versions               // Channel [ versions YAML string ]
 
 }

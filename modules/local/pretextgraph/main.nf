@@ -32,7 +32,7 @@ process PRETEXTGRAPH {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        pretextgraph: \$(PretextGraph | grep "Version" | sed 's/PretextGraph Version //g')
+        pretextgraph: \$(PretextGraph | grep "Version" | sed 's/.*Version //')
     END_VERSIONS
     """
 
@@ -45,7 +45,7 @@ process PRETEXTGRAPH {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        pretextgraph: \$(PretextGraph | grep "Version" | sed 's/PretextGraph Version //g')
+        pretextgraph: \$(PretextGraph | grep "Version" | sed 's/.*Version //')
     END_VERSIONS
     """
 }

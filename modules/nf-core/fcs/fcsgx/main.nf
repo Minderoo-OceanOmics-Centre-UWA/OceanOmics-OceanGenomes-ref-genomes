@@ -26,7 +26,6 @@ process FCS_FCSGX {
     }
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
-    def FCSGX_VERSION = '0.4.0'
 
     """
 
@@ -57,7 +56,7 @@ process FCS_FCSGX {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         python: \$(python3 --version 2>&1 | sed -e "s/Python //g")
-        FCS-GX: $FCSGX_VERSION
+        fcsgx: \$( gx --help | sed '/build/!d; s/.*:v//; s/-.*//' )
     END_VERSIONS
     """
 
@@ -67,7 +66,6 @@ process FCS_FCSGX {
         error "FCS_FCSGX module does not support Conda. Please use Docker / Singularity / Podman instead."
     }
     def prefix = task.ext.prefix ?: "${meta.id}"
-    def FCSGX_VERSION = '0.4.0'
 
     """
     mkdir -p out
@@ -78,7 +76,7 @@ process FCS_FCSGX {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         python: \$(python3 --version 2>&1 | sed -e "s/Python //g")
-        FCS-GX: $FCSGX_VERSION
+        fcsgx: \$( gx --help | sed '/build/!d; s/.*:v//; s/-.*//' )
     END_VERSIONS
     """
 }

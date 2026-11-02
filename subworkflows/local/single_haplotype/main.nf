@@ -217,6 +217,7 @@ workflow SINGLE_HAPLOTYPE {
         false,
         false
     )
+    ch_versions = ch_versions.mix(TELO_FINDER.out.versions)
 
     ch_telomere_sh_for_pretext = TELO_FINDER.out.bedgraph_file
         .map { meta, bedgraphs -> [ meta, bedgraphs[0] ] }

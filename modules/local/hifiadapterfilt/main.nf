@@ -37,6 +37,8 @@ process HIFIADAPTERFILT {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         HiFiAdapterFilt: 2.0.0
+        blastn: \$(blastn -version | sed '1!d; s/blastn: //; s/+\$//')
+        bamtools: \$(bamtools --version | sed '/^bamtools /!d; s/bamtools //')
     END_VERSIONS
     """
 }

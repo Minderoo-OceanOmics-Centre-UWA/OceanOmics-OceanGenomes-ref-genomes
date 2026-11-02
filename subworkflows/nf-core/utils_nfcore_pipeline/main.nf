@@ -72,9 +72,42 @@ def workflowCitation() {
 }
 
 //
+// Git details of the pipeline checkout. Nextflow only sets workflow.commitId when it
+// pulls the pipeline itself, not when main.nf is run from a local clone.
+//
+def getGitInfo() {
+    def runGit = { List args ->
+        try {
+            def proc = (['git', '-C', workflow.projectDir.toString()] + args).execute()
+            def out = proc.text.trim()
+            return proc.waitFor() == 0 && out ? out : null
+        } catch (Exception e) {
+            return null
+        }
+    }
+    def remote = runGit(['config', '--get', 'remote.origin.url'])
+    return [
+        describe: runGit(['describe', '--tags', '--always', '--dirty']),
+        commit  : runGit(['rev-parse', 'HEAD']),
+        branch  : runGit(['rev-parse', '--abbrev-ref', 'HEAD']),
+        dirty   : runGit(['status', '--porcelain', '--untracked-files=no']) != null,
+        remote  : remote ? remote.replaceAll(/\/\/[^\/@]+@/, '//') : null  // drop any embedded credentials
+    ]
+}
+
+//
 // Generate workflow version string
 //
 def getWorkflowVersion() {
+    // Local clone: use git describe, e.g. v2.0.0-9-g6c65158-dirty
+    // (9 commits after tag v2.0.0, at commit 6c65158, with uncommitted changes)
+    if (!workflow.commitId) {
+        def git_describe = getGitInfo().describe
+        if (git_describe) {
+            return git_describe
+        }
+    }
+
     def version_string = "" as String
     if (workflow.manifest.version) {
         def prefix_v = workflow.manifest.version[0] != 'v' ? 'v' : ''
@@ -108,11 +141,21 @@ return yaml.dumpAsMap(coll).trim()
 // Get workflow version for pipeline
 //
 def workflowVersionToYAML() {
-    return """
-    Workflow:
-        ${workflow.manifest.name}: ${getWorkflowVersion()}
-        Nextflow: ${workflow.nextflow.version}
-    """.stripIndent().trim()
+    def git = getGitInfo()
+    def lines = [
+        "Workflow:",
+        "    ${workflow.manifest.name}: \"${getWorkflowVersion()}\"",
+    ]
+    if (git.commit) {
+        lines << "    Git commit: \"${git.commit}\""
+        lines << "    Git branch: \"${git.branch}\""
+        lines << "    Git uncommitted changes: \"${git.dirty ? 'yes' : 'no'}\""
+    }
+    if (git.remote) {
+        lines << "    Git remote: \"${git.remote}\""
+    }
+    lines << "    Nextflow: \"${workflow.nextflow.version}\""
+    return lines.join('\n')
 }
 
 //

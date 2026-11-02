@@ -52,7 +52,7 @@ process CAT_HIC {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        fastqc: \$( fastqc --version | sed '/FastQC v/!d; s/.*v//' )
+        busybox: \$( busybox | sed '1!d; s/BusyBox v//; s/ .*//' )
     END_VERSIONS
     """
 }
