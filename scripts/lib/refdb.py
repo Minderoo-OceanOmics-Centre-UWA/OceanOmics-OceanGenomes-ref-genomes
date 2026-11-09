@@ -37,6 +37,11 @@ TOOL_TABLES = {
     "ref_seqkit_stats": ("format", "type", "num_seqs", "sum_len", "min_len", "avg_len", "max_len"),
     "ref_chromosome_stats": ("num_chromosomes", "pct_assigned", "pct_no_super", "num_seq_no_super",
                              "max_len_no_super"),
+    # genomes_db_review migration 083: written by 06a_push_decontam_results_to_sqldb.py (stage 2).
+    "ref_decontamination": ("input_seqs", "input_bp", "fcs_exclude_seqs", "fcs_exclude_bp", "fcs_trim_seqs",
+                            "fcs_trim_bp", "fcs_fix_seqs", "fcs_review_seqs", "tiara_mito_seqs",
+                            "tiara_mito_bp", "tiara_plastid_seqs", "tiara_plastid_bp",
+                            "tiara_prokaryote_seqs", "tiara_prokaryote_bp"),
 }
 READ_SET_TABLES = {
     "ref_genomescope": ("homozygosity", "heterozygosity", "genomesize", "repeatsize", "uniquesize",
