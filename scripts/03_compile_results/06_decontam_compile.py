@@ -4,9 +4,12 @@
 One row per assembly and haplotype (hap1, hap2), from the DECONTAMINATION subworkflow's outputs:
   input_seqs, input_bp   the YaHS scaffolds FCS-GX was given (read from the scaffold FASTA)
   fcs_*                  FCS-GX report rows by action; bp = end - start + 1
-  tiara_*                the contigs TIARA_TIARA removes (modules/nf-core/tiara/tiara/main.nf):
-                         mitochondrion, plastid, and prokarya / bacteria / archaea as prokaryote,
-                         with bp from the scaffold FASTA
+  tiara_*                the contigs Tiara removed: mitochondrion, plastid, and prokarya / bacteria /
+                         archaea as prokaryote, with bp from the scaffold FASTA. Where the post-Tiara
+                         FASTA (<key>.2.tiara.hapN_scaffolds.fa) survives, a flagged contig counts only
+                         if it is missing from it: older runs flagged contigs without removing them
+                         (OG824 v241004.hic1: 237 prokaryote hits, all 619 scaffolds kept). Otherwise
+                         the TIARA_TIARA module's rule (modules/nf-core/tiara/tiara/main.nf) is assumed.
 Not the module's tiara_filter_summary.txt: its bp column is always 0.
 
 Sources:
@@ -34,6 +37,7 @@ TIARA_RE = re.compile(rf"^{KEY}\.(?P<stage>\d)\.yahs\.(?P<hap>hap[12])\.tiara\.t
 FCS_RE = re.compile(rf"^{KEY}_?\.(?P<stage>\d)\.yahs\.(?P<hap>hap[12])\.NCBI\.\d+\.fcs_gx_report\.txt$")
 FASTA_RE = re.compile(rf"^{KEY}\.(?P<stage>\d)\.yahs\.(?P<hap>hap[12])(?P<suffix>_scaffolds_final|_scaffolds)?\.fa(?:sta)?$")
 FASTA_PREFERENCE = ("_scaffolds_final", "_scaffolds", None)
+TIARA_OUT_RE = re.compile(rf"^{KEY}\.(?P<stage>\d)\.tiara\.(?P<hap>hap[12])_scaffolds\.fa(?:sta)?$")
 
 MITO, PLASTID, PROKARYOTE = "mito", "plastid", "prokaryote"
 FCS_ACTIONS = ("EXCLUDE", "TRIM", "FIX", "REVIEW")
@@ -56,7 +60,8 @@ class Source:
         if self.remote:
             out = subprocess.run(
                 ["rclone", "lsf", "-R", "--fast-list", "--files-only",
-                 "--include", "*/decontamination/**", "--include", "*/assembly/*yahs*", self.remote],
+                 "--include", "*/decontamination/**", "--include", "*/assembly/*yahs*",
+                 "--include", "*/assembly/*.tiara.hap[12]_scaffolds.fa", self.remote],
                 check=True, capture_output=True, text=True).stdout
             return [p for p in out.splitlines() if p]
         paths = []
@@ -133,9 +138,16 @@ def fasta_lengths(lines, wanted):
     return n, total, lengths
 
 
-def compile_row(key, tiara_lines, fcs_lines, fasta_lines):
+def fasta_ids(lines):
+    return {line[1:].split()[0] for line in lines if line.startswith(">")}
+
+
+def compile_row(key, tiara_lines, fcs_lines, fasta_lines, tiara_out_lines=None):
     og, date, ver, hap = key
     removed = tiara_removed(tiara_lines)
+    if tiara_out_lines is not None:
+        kept = fasta_ids(tiara_out_lines)
+        removed = {c: k for c, k in removed.items() if c not in kept}
     actions = fcs_actions(fcs_lines)
     row = {"og_id": og, "seq_date": date, "version": ver, "haplotype": hap}
     for action in FCS_ACTIONS:
@@ -164,12 +176,13 @@ def compile_row(key, tiara_lines, fcs_lines, fasta_lines):
 # -- matching files to assemblies -----------------------------------------------------------------
 
 def index(paths):
-    """{(og, date, version, hap): {'tiara': path, 'fcs': path, 'fasta': path}}; stage 2 files win
+    """{(og, date, version, hap): {'tiara', 'fcs', 'fasta', 'tiara_out': path}}; stage 2 files win
     over stage 1 ones, and _scaffolds_final over _scaffolds over a bare .fa."""
     found = defaultdict(dict)
     for rel in paths:
         name = rel.rsplit("/", 1)[-1]
-        for kind, rx in (("tiara", TIARA_RE), ("fcs", FCS_RE), ("fasta", FASTA_RE)):
+        for kind, rx in (("tiara", TIARA_RE), ("fcs", FCS_RE), ("fasta", FASTA_RE),
+                         ("tiara_out", TIARA_OUT_RE)):
             m = rx.match(name)
             if not m:
                 continue
@@ -202,7 +215,8 @@ def main():
             continue
         try:
             row, problem = compile_row(key, source.lines(f["tiara"]), source.lines(f["fcs"]),
-                                       source.lines(f["fasta"]) if "fasta" in f else None)
+                                       source.lines(f["fasta"]) if "fasta" in f else None,
+                                       source.lines(f["tiara_out"]) if "tiara_out" in f else None)
         except (OSError, ValueError, IndexError) as exc:
             skipped.append((key, f"unreadable: {exc}"))
             continue
@@ -211,7 +225,9 @@ def main():
             skipped.append((key, f"{problem}; bp left blank"))
         print(f"{'_'.join(key[:2])}.{key[2]} {key[3]}: in {row['input_seqs']}, "
               f"Tiara {row['tiara_mito_seqs']}/{row['tiara_plastid_seqs']}/{row['tiara_prokaryote_seqs']}, "
-              f"FCS excl {row['fcs_exclude_seqs']} trim {row['fcs_trim_seqs']}", file=sys.stderr, flush=True)
+              f"FCS excl {row['fcs_exclude_seqs']} trim {row['fcs_trim_seqs']}"
+              f"{'' if 'tiara_out' in f else ' (no post-Tiara FASTA: module rule assumed)'}",
+              file=sys.stderr, flush=True)
 
     with open(args.out, "w") as out:
         out.write("\t".join(COLUMNS) + "\n")

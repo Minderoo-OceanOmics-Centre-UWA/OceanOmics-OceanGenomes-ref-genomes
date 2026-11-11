@@ -90,6 +90,16 @@ class Compile(unittest.TestCase):
         self.assertEqual(rows[0]["tiara_mito_bp"], "")
         self.assertIn("1 Tiara contig(s) not in the scaffold FASTA", err)
 
+    def test_post_tiara_fasta_decides_what_was_removed(self):
+        # Older runs flagged contigs without removing them (OG824 v241004.hic1 on Acacia).
+        row, problem = compiler["compile_row"](
+            ("OG2089", "260721", "hic1", "hap1"), TIARA.splitlines(True), FCS.splitlines(True),
+            fasta(LENGTHS).splitlines(True),
+            fasta({k: v for k, v in LENGTHS.items() if k != "scaffold_2"}).splitlines(True))
+        self.assertIsNone(problem)
+        self.assertEqual((row["tiara_mito_seqs"], row["tiara_mito_bp"]), (1, 16000))
+        self.assertEqual((row["tiara_prokaryote_seqs"], row["tiara_prokaryote_bp"]), (0, 0))
+
     def test_index_prefers_stage_2_and_final_scaffolds(self):
         files = compiler["index"]([
             "OG90/OG90_v240821.hic1/decontamination/tiara/OG90_v240821.hic1.1.yahs.hap1.tiara.txt",
@@ -104,6 +114,7 @@ class Compile(unittest.TestCase):
         self.assertTrue(f["tiara"].endswith(".2.yahs.hap1.tiara.txt"))
         self.assertTrue(f["fasta"].endswith("_scaffolds_final.fa"))
         self.assertIn(("OG860", "240927", "hic1", "hap1"), files)        # date without the v
+        self.assertTrue(f["tiara_out"].endswith(".2.tiara.hap1_scaffolds.fa"))
         self.assertEqual({k[0] for k in files}, {"OG90", "OG860"})       # OG90_bc2008 is not an OG
 
 
