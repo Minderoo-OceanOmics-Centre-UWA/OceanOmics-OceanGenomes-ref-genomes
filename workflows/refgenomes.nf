@@ -519,8 +519,8 @@ workflow REFGENOMES {
 
 
     // Prepare input channels for YAHS
-    ch_yahs_hap1_in = OMNIC_HAP1.out.omnic_bam.join(GFASTATS_HAP1.out.assembly).join(OMNIC_HAP1.out.omnic_fai)
-    ch_yahs_hap2_in = OMNIC_HAP2.out.omnic_bam.join(GFASTATS_HAP2.out.assembly).join(OMNIC_HAP2.out.omnic_fai)
+    ch_yahs_hap1_in = (params.yahs_namesort ? OMNIC_HAP1.out.omnic_nsort_bam : OMNIC_HAP1.out.omnic_bam).join(GFASTATS_HAP1.out.assembly).join(OMNIC_HAP1.out.omnic_fai)
+    ch_yahs_hap2_in = (params.yahs_namesort ? OMNIC_HAP2.out.omnic_nsort_bam : OMNIC_HAP2.out.omnic_bam).join(GFASTATS_HAP2.out.assembly).join(OMNIC_HAP2.out.omnic_fai)
     
     // Prepare input channels for SALSA
     ch_bamtobed_hap1_in = OMNIC_HAP1.out.omnic_bam

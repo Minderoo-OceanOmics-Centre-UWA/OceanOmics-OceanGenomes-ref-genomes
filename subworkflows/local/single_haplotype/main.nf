@@ -106,7 +106,8 @@ workflow SINGLE_HAPLOTYPE {
     //
     // STEP 5: YAHS - scaffold with HiC (single haplotype)
     //
-    ch_yahs_sh_in = OMNIC_SH.out.omnic_bam
+    // Name-sorted BAM when params.yahs_namesort, so YaHS applies -q (see modules/local/omnic)
+    ch_yahs_sh_in = (params.yahs_namesort ? OMNIC_SH.out.omnic_nsort_bam : OMNIC_SH.out.omnic_bam)
         .join(GFASTATS_SH.out.assembly)
         .join(OMNIC_SH.out.omnic_fai)
 

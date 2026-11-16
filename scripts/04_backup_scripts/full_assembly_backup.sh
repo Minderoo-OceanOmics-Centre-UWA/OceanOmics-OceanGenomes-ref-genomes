@@ -178,21 +178,21 @@ if [[ "$mode" == "hifi_hic" ]]; then
     # OMNIC post-scaffolding BAMs (dual + hap1 + hap2)
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.mapped.PT.bam" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.mapped.PT.bam.bai" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.mapped.PT.bam.csi" \
         "${OG}/${OG}_${asm_ver}/bam"
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.stats.txt" \
         "${OG}/${OG}_${asm_ver}/bam"
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.mapped.PT.bam" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.mapped.PT.bam.bai" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.mapped.PT.bam.csi" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hic1.hap1.stats.txt" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.stats.txt" \
         "${OG}/${OG}_${asm_ver}/bam"
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.mapped.PT.bam" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.mapped.PT.bam.bai" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.mapped.PT.bam.csi" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hic1.hap2.stats.txt" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.stats.txt" \
         "${OG}/${OG}_${asm_ver}/bam"
 
     # Decontamination QC
@@ -280,21 +280,21 @@ if [[ "$mode" == "dual_hap" ]]; then
     # OMNIC post-scaffolding BAMs (dual + hap1 + hap2)
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.mapped.PT.bam" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.mapped.PT.bam.bai" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.mapped.PT.bam.csi" \
         "${OG}/${OG}_${asm_ver}/bam"
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.dual.stats.txt" \
         "${OG}/${OG}_${asm_ver}/bam"
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.mapped.PT.bam" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.mapped.PT.bam.bai" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.mapped.PT.bam.csi" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hic1.hap1.stats.txt" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap1.stats.txt" \
         "${OG}/${OG}_${asm_ver}/bam"
     rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.mapped.PT.bam" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.mapped.PT.bam.bai" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.mapped.PT.bam.csi" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hic1.hap2.stats.txt" \
+    rclone_copy "${OG}/05-decontamination/omnic/${OG}_${asm_ver}.hap2.stats.txt" \
         "${OG}/${OG}_${asm_ver}/bam"
 
     # Decontamination QC
@@ -347,9 +347,9 @@ fi
 if [[ "$mode" == "single_hap" ]]; then
 
     # Assembly FASTA (gfastats-sh output — same naming as hap1 in hifi_hic)
-    rclone_copy "${OG}/03-assembly/gfastats-sh/${OG}_${asm_ver}.0.hifiasm.hap1.assembly_summary.txt" \
+    rclone_copy "${OG}/03-assembly/gfastats-sh/${OG}_${asm_ver}.1.hifiasm.hap1.assembly_summary.txt" \
         "${OG}/${OG}_${asm_ver}/gfastats"
-    rclone_copy "${OG}/03-assembly/gfastats-sh/${OG}_${asm_ver}.0.hifiasm.hap1.fasta" \
+    rclone_copy "${OG}/03-assembly/gfastats-sh/${OG}_${asm_ver}.1.hifiasm.hap1.fasta" \
         "${OG}/${OG}_${asm_ver}/assembly"
 
     # Merqury and BUSCO (contig-level)
@@ -365,15 +365,15 @@ if [[ "$mode" == "single_hap" ]]; then
         "${OG}/${OG}_${asm_ver}/bam"
 
     # YAHS scaffold (single hap)
-    rclone_copy "${OG}/04-scaffolding/yahs-sh/${OG}_${asm_ver}.1.yahs.hap1_scaffolds_final.fa" \
+    rclone_copy "${OG}/04-scaffolding/yahs-sh/${OG}_${asm_ver}.2.yahs.hap1_scaffolds_final.fa" \
         "${OG}/${OG}_${asm_ver}/assembly"
 
     # OMNIC post-scaffolding BAM (single hap)
     rclone_copy "${OG}/05-decontamination/omnic-sh/${OG}_${asm_ver}.hap1.mapped.PT.bam" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic-sh/${OG}_${asm_ver}.hap1.mapped.PT.bam.bai" \
+    rclone_copy "${OG}/05-decontamination/omnic-sh/${OG}_${asm_ver}.hap1.mapped.PT.bam.csi" \
         "${OG}/${OG}_${asm_ver}/bam"
-    rclone_copy "${OG}/05-decontamination/omnic-sh/${OG}_${asm_ver}.hic1.hap1.stats.txt" \
+    rclone_copy "${OG}/05-decontamination/omnic-sh/${OG}_${asm_ver}.hap1.stats.txt" \
         "${OG}/${OG}_${asm_ver}/bam"
 
     # Decontamination QC
@@ -391,9 +391,12 @@ if [[ "$mode" == "single_hap" ]]; then
         "${OG}/${OG}_${asm_ver}/assembly"
 
     # Coverage, telomere, pretext (use -sh pretext dir)
-    rclone_copy "${OG}/06-coverage-tracks/${OG}_${asm_ver}.hap1.gaps.bedgraph" \
+    # COVERAGE_TRACKS writes .dual.hap.* in this mode too; .hap1.* is the name used by hand-built runs
+    cov=dual.hap
+    [[ -e "${OG}/06-coverage-tracks/${OG}_${asm_ver}.hap1.bedgraph" ]] && cov=hap1
+    rclone_copy "${OG}/06-coverage-tracks/${OG}_${asm_ver}.${cov}.gaps.bedgraph" \
         "${OG}/${OG}_${asm_ver}/bedgraph"
-    rclone_copy "${OG}/06-coverage-tracks/${OG}_${asm_ver}.hap1.bedgraph" \
+    rclone_copy "${OG}/06-coverage-tracks/${OG}_${asm_ver}.${cov}.bedgraph" \
         "${OG}/${OG}_${asm_ver}/bedgraph"
     rclone_copy "${OG}/07-telomers" \
         "${OG}/${OG}_${asm_ver}/bedgraph"

@@ -14,6 +14,7 @@ process OMNIC {
     tuple val(meta), path("*.stats.txt"), emit: omnic_stats
     tuple val(meta), path("*.mapped.PT.bam"), emit: omnic_bam
     tuple val(meta), path("*.mapped.PT.bam.csi"), emit: omnic_bai
+    tuple val(meta), path("*.mapped.PT.nsort.bam"), emit: omnic_nsort_bam, optional: true
     tuple val(meta), path("*fai"), emit: omnic_fai
     path "versions.yml"           , emit: versions
 
@@ -23,6 +24,9 @@ process OMNIC {
     script:
     def args = task.ext.args ?: ''
         def prefix = task.ext.prefix ?: "${meta.id}"
+    // ext.namesort: also write a read-name-sorted copy for YaHS. YaHS ignores -q (MAPQ filter) on
+    // coordinate-sorted BAMs, so without it multi-mapping links are used (OG2119 hic1 joined whole chromosomes).
+    def namesort = task.ext.namesort ? "samtools sort -n -@32 -T \"${tempdir}/${meta.id}_${haplotype}_nsort\" -o \"${meta.id}.${haplotype}.mapped.PT.nsort.bam\" \"${meta.id}.${haplotype}.mapped.PT.bam\"" : ''
     
     """
     export PATH=\$PATH:/opt/conda/envs/pairtools/bin
@@ -53,6 +57,7 @@ process OMNIC {
     | samtools sort -@32 -T "${tempdir}/${meta.id}_temp.bam" -o "${meta.id}.${haplotype}.mapped.PT.bam" -
 
     samtools index --csi "${meta.id}.${haplotype}.mapped.PT.bam"
+    ${namesort}
 
     rm -f "${meta.id}.${haplotype}.genome" \\
           ${assembly}.amb ${assembly}.ann ${assembly}.bwt ${assembly}.pac ${assembly}.sa
