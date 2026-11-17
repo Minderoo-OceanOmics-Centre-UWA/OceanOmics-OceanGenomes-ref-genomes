@@ -51,6 +51,17 @@ process MERQURY {
         $assembly \\
         ${prefix}.${asmversion}
 
+    # merqury.sh exits 0 even when a step is killed for memory, leaving blank rows.
+    # Check every row is filled; exit 137 so the retry with more memory runs.
+    n_asm=\$(echo $assembly | wc -w)
+    want=\$(( n_asm > 1 ? n_asm + 1 : 1 ))
+    got_c=\$(awk -F'\t' '\$5 != ""' ${prefix}.${asmversion}.completeness.stats 2>/dev/null | wc -l)
+    got_q=\$(awk -F'\t' '\$4 != ""' ${prefix}.${asmversion}.qv 2>/dev/null | wc -l)
+    if [ "\$got_c" -lt "\$want" ] || [ "\$got_q" -lt "\$want" ] || grep -q -i -E 'killed|out of memory|bad_alloc' logs/*.log 2>/dev/null; then
+        echo "Merqury output incomplete (completeness \$got_c/\$want, qv \$got_q/\$want rows), probably out of memory" >&2
+        exit 137
+    fi
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         merqury: $VERSION
