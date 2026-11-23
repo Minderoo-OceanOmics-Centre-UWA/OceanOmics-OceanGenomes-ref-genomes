@@ -13,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts" / "lib"))
 sys.path.insert(0, str(HERE))
 import refdb  # noqa: E402
-from fakedb import FakeConn  # noqa: E402
+from fakedb import FakeConn, make_bam  # noqa: E402
 
 KEY = {"og_id": "OG762", "seq_date": "241019", "version": "hic1", "stage": 3, "haplotype": "hap1"}
 
@@ -251,6 +251,70 @@ class Transactions(unittest.TestCase):
             refdb.main_guard(boom)
         self.assertEqual(cm.exception.code, 1)
         self.assertIn("bad row", err.getvalue())
+
+
+class HicRuns(unittest.TestCase):
+    """Migration 094: an assembly's Hi-C runs are the flowcells in its Hi-C BAM's read names."""
+
+    def bam(self, names, **kw):
+        import os
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d)
+        path = os.path.join(d, "OG2119_v260408.hic1.hap1.mapped.PT.bam")
+        make_bam(path, names, **kw)
+        return path
+
+    def test_flowcells_counted_across_blocks(self):
+        names = ([f"A01995:73:HGK2LDRX7:1:1101:{i}:1000" for i in range(2500)]
+                 + [f"A01995:77:HNTVNDRX7:2:2202:{i}:2000" for i in range(700)])
+        self.assertEqual(refdb.bam_flowcells(self.bam(names, block_records=300)),
+                         {"HGK2LDRX7": 2500, "HNTVNDRX7": 700})
+
+    def test_names_without_a_flowcell_are_skipped(self):
+        path = self.bam(["SRR1234.1", "A01995:73:HGK2LDRX7:1:1101:1:1"])
+        self.assertEqual(refdb.bam_flowcells(path), {"HGK2LDRX7": 1})
+
+    def test_only_the_first_bytes_are_read(self):
+        names = [f"A01995:73:HGK2LDRX7:1:1101:{i}:1000" for i in range(5000)]
+        n = refdb.bam_flowcells(self.bam(names, block_records=100), max_bytes=2000)["HGK2LDRX7"]
+        self.assertTrue(0 < n < 5000)
+
+    def test_not_a_bam_or_no_flowcell_raises(self):
+        import os
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d)
+        txt = os.path.join(d, "x.bam")
+        with open(txt, "w") as fh:
+            fh.write("not a bam")
+        with self.assertRaises(ValueError):
+            refdb.bam_flowcells(txt)
+        with self.assertRaises(ValueError):
+            refdb.bam_flowcells(self.bam(["SRR1234.1"]))
+
+    def test_set_hic_flowcells_sorts_and_returns_problems(self):
+        conn = FakeConn(assemblies={("OG2119", "260408", "hic1"): 7}, hic_problems={7: ["flowcell X: no run"]})
+        out = refdb.set_hic_flowcells(conn.cursor(), "OG2119", "260408", "hic1", {"HNTVNDRX7": 2, "HGK2LDRX7": 5})
+        self.assertEqual(out, ["flowcell X: no run"])
+        sql, params = conn.statements[-1]
+        self.assertTrue(sql.startswith("SELECT set_ref_assembly_hic_flowcells"))
+        self.assertEqual(params, (7, ["HGK2LDRX7", "HNTVNDRX7"], [5, 2]))
+
+    def test_set_hic_flowcells_needs_the_assembly(self):
+        with self.assertRaises(ValueError):
+            refdb.set_hic_flowcells(FakeConn().cursor(), "OG2119", "260408", "hic9", {"HGK2LDRX7": 1})
+
+    def test_write_commits_then_raises_on_problems(self):
+        conn = FakeConn(assemblies={("OG1", "240101", "hic1"): 1, ("OG2", "240101", "hic1"): 2},
+                        hic_problems={2: ["flowcell HWLY7DRX5 (NOVA_250505_AD): no non-failed Hi-C sequencing row of OG2"]})
+        items = [(("OG1", "240101", "hic1"), {"HGK2LDRX7": 1}), (("OG2", "240101", "hic1"), {"HWLY7DRX5": 1})]
+        with mock.patch.object(refdb, "connect", return_value=conn), redirect_stdout(io.StringIO()) as out, \
+                self.assertRaises(RuntimeError) as cm:
+            refdb.write_hic_flowcells({}, items)
+        self.assertEqual((conn.commits, conn.rollbacks), (1, 0))
+        self.assertIn("1 linked, 1 unresolved", out.getvalue())
+        self.assertIn("OG2 240101.hic1: flowcell HWLY7DRX5", str(cm.exception))
 
 
 class Config(unittest.TestCase):

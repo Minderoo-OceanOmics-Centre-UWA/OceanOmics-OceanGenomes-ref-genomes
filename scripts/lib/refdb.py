@@ -494,6 +494,87 @@ def write_adapter_filter(db_params, read_set_rows, stats_files):
     return write_all(db_params, writes, "ref_hifi_adapter_filter_run + ref_hifi_adapter_filter")
 
 
+# -- Hi-C runs of an assembly (genomes_db_review migration 094) -------------------------------------
+# An Illumina read name starts instrument:run_number:flowcell:lane, and bwa mem and pairtools keep the
+# names, so the flowcells among an assembly's Hi-C BAM records are the runs its Hi-C came from. The
+# database maps a flowcell to its run (sequencing_run.flowcell) and derives the links
+# (set_ref_assembly_hic_flowcells, v_ref_assembly_hic_rule). Only the standard library is used here,
+# so this runs in the psycopg2 container, which has no samtools.
+
+BAM_SAMPLE_BYTES = 4_000_000  # ~50,000 records of a coordinate-sorted BAM: every input run shows
+
+
+def bam_flowcells(path, max_bytes=BAM_SAMPLE_BYTES):
+    """{flowcell: records} over the first max_bytes of a BAM. Raises ValueError if it is not a BAM
+    or no read name carries a flowcell (a BAM whose names were rewritten cannot say)."""
+    import struct
+    import zlib
+    with open(Path(path).expanduser(), "rb") as fh:
+        data = fh.read(max_bytes)
+    out = bytearray()
+    i = 0
+    while i + 18 <= len(data) and data[i:i + 4] == b"\x1f\x8b\x08\x04":
+        bsize = struct.unpack("<H", data[i + 16:i + 18])[0] + 1
+        if i + bsize > len(data):
+            break
+        out += zlib.decompress(data[i + 18:i + bsize - 8], -15)
+        i += bsize
+    if out[:4] != b"BAM\x01":
+        raise ValueError(f"{path}: not a BAM file")
+    p = 8 + struct.unpack("<i", out[4:8])[0]
+    n_ref = struct.unpack("<i", out[p:p + 4])[0]
+    p += 4
+    for _ in range(n_ref):
+        p += 4 + struct.unpack("<i", out[p:p + 4])[0] + 4
+    counts = {}
+    while p + 4 <= len(out):
+        bs = struct.unpack("<i", out[p:p + 4])[0]
+        if p + 4 + bs > len(out):
+            break
+        l_name = out[p + 12]
+        f = bytes(out[p + 36:p + 36 + l_name - 1]).decode(errors="replace").split(":")
+        if len(f) >= 7:
+            counts[f[2]] = counts.get(f[2], 0) + 1
+        p += 4 + bs
+    if not counts:
+        raise ValueError(f"{path}: no Illumina read names with a flowcell in the first {max_bytes:,} bytes")
+    return counts
+
+
+def set_hic_flowcells(cur, og_id, seq_date, version, flowcells):
+    """Record an assembly's Hi-C flowcells ({flowcell: records}); the database derives its Hi-C links.
+    Returns the problems the database reports (a flowcell no run has; a run with no non-failed Hi-C
+    row of the OG): until they are fixed the assembly has no Hi-C link."""
+    cur.execute("SELECT assembly_id FROM ref_assembly WHERE og_id = %s AND seq_date = %s AND version = %s",
+                (og_id, str(seq_date), version))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError(f"no ref_assembly {og_id} {seq_date}.{version}: push the assembly's results first")
+    fcs = sorted(flowcells)
+    cur.execute("SELECT set_ref_assembly_hic_flowcells(%s, %s, %s)", (row[0], fcs, [flowcells[f] for f in fcs]))
+    return list((cur.fetchone() or [[]])[0] or [])
+
+
+def write_hic_flowcells(db_params, items):
+    """items: [((og_id, seq_date, version), {flowcell: records})]. One transaction, committed, then
+    raises RuntimeError listing every problem, so the caller exits non-zero while the resolvable
+    assemblies stay linked (v_ref_assembly_hic_readiness lists the rest)."""
+    items = list(items)
+    problems = []
+
+    def writes(cur):
+        counts = {}
+        for (og_id, seq_date, version), flowcells in items:
+            found = set_hic_flowcells(cur, og_id, seq_date, version, flowcells)
+            problems.extend(f"{og_id} {seq_date}.{version}: {p}" for p in found)
+            outcome = "unresolved" if found else "linked"
+            counts[outcome] = counts.get(outcome, 0) + 1
+        return counts
+    write_all(db_params, writes, "ref_assembly_hic_flowcell")
+    if problems:
+        raise RuntimeError("Hi-C runs not linked:\n  " + "\n  ".join(problems))
+
+
 def upsert_hifi_read_qc(cur, row):
     """One PacBio HiFi library-on-run row. Links the one sequencing row of that library on that run,
     rebuilding the tube as og_id||tissue||'_'||ext_type||'_'||lib_code (NULL if none or several)."""

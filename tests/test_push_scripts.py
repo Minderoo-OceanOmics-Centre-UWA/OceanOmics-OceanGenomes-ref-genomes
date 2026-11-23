@@ -24,7 +24,7 @@ COMPILE = REPO / "scripts" / "03_compile_results"
 sys.path.insert(0, str(REPO / "scripts" / "lib"))
 sys.path.insert(0, str(HERE))
 import refdb  # noqa: E402
-from fakedb import FakeConn  # noqa: E402
+from fakedb import FakeConn, make_bam  # noqa: E402
 
 SHEET_OGS = {r["sample"] for r in csv.DictReader(open(FIX / "samplesheet.csv"))}
 
@@ -166,6 +166,57 @@ class ReadLevel(PushScriptCase):
         self.assertEqual(set(rows), {"OG762", "OG799"})
         self.assertEqual(rows["OG762"]["hifi_reads"], 3000000)
         self.assertEqual(rows["OG762"]["barcode"], "bc2032")
+
+
+class HicRuns(PushScriptCase):
+    """05b: the flowcells in each Hi-C assembly's BAM go to set_ref_assembly_hic_flowcells (094)."""
+    SHEET = ("sample,version,date,hifi_dir,taxid\n"
+             "OG2119,hic1,v260408,/x,\nOG762,hifi1,v241019,/x,\n")
+
+    def bam_in(self, tmp, rel, names):
+        p = tmp / "base" / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        make_bam(p, names)
+
+    def run_05b(self, conn, bams):
+        # run_script makes the temp folder, so put the BAMs in it as it is made.
+        real = tempfile.mkdtemp
+
+        def mkdtemp(*a, **k):
+            d = Path(real(*a, **k))
+            for rel, names in bams.items():
+                self.bam_in(d, rel, names)
+            return str(d)
+        with mock.patch.object(tempfile, "mkdtemp", mkdtemp):
+            return self.run_script(COMPILE / "05b_push_hic_runs_to_sqldb.py", [], ["{tmp}/sheet.csv", "{tmp}/base"],
+                                   conn=conn, tsv_override={"sheet.csv": self.SHEET})
+
+    def test_links_from_the_hap1_bam_and_skips_non_hic(self):
+        conn = FakeConn(assemblies={("OG2119", "260408", "hic1"): 41})
+        names = [f"A01995:73:HGK2LDRX7:1:1:{i}:1" for i in range(30)] + [f"A01995:77:HNTVNDRX7:1:1:{i}:1" for i in range(20)]
+        conn, code, out = self.run_05b(conn, {
+            "OG2119/OG2119_v260408.hic1/05-decontamination/omnic_hap1/OG2119_v260408.hic1.hap1.mapped.PT.bam": names,
+            "OG2119/OG2119_v260408.hic1/05-decontamination/omnic_hap2/OG2119_v260408.hic1.hap2.mapped.PT.bam": names[:5]})
+        self.assertEqual(code, 0, out)
+        self.assertEqual((conn.commits, conn.rollbacks), (1, 0))
+        calls = [p for s, p in conn.statements if s.startswith("SELECT set_ref_assembly_hic_flowcells")]
+        self.assertEqual(calls, [(41, ["HGK2LDRX7", "HNTVNDRX7"], [30, 20])])
+        self.assertIn("HGK2LDRX7 (30), HNTVNDRX7 (20)", out)
+        self.assertNotIn("OG762", out)
+
+    def test_unresolved_flowcell_and_missing_bam_exit_1_after_committing(self):
+        conn = FakeConn(assemblies={("OG2119", "260408", "hic1"): 41},
+                        hic_problems={41: ["flowcell HGK2LDRX7: no sequencing_run has it"]})
+        conn, code, out = self.run_05b(conn, {
+            "OG2119/x/OG2119_v260408.hic1.hap1.mapped.PT.bam": ["A01995:73:HGK2LDRX7:1:1:1:1"]})
+        self.assertEqual(code, 1)
+        self.assertEqual(conn.commits, 1)
+        self.assertIn("no sequencing_run has it", out)
+
+        conn, code, out = self.run_05b(FakeConn(), {})
+        self.assertEqual(code, 1)
+        self.assertEqual(conn.commits, 0)
+        self.assertIn("no Hi-C BAM", out)
 
 
 class Failures(PushScriptCase):

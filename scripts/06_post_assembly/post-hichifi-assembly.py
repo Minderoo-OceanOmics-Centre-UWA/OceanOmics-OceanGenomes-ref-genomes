@@ -197,28 +197,33 @@ def compile_push_job(run_name, samplesheet):
 {MAIL_DIRECTIVES}
 
 cd {SCRIPTS_DIR}
+status=0  # the job exits non-zero (sacct, the compile log) if any push failed, not only the last
 
-echo "=== [1/5] Final GFAstats ==="
+echo "=== [1/6] Final GFAstats ==="
 bash 04_final_gfastats_compile.sh
-singularity run {PSYCOPG2_SIF} python 04a_push_gfa_results_to_sqldb.py {POSTGRES_CFG} {samplesheet}
+singularity run {PSYCOPG2_SIF} python 04a_push_gfa_results_to_sqldb.py {POSTGRES_CFG} {samplesheet} || status=1
 
-echo "=== [2/5] BUSCO ==="
+echo "=== [2/6] BUSCO ==="
 bash 03_busco_compile.sh
-singularity run {PSYCOPG2_SIF} python 03a_push_busco_results_to_sqldb.py {POSTGRES_CFG} {samplesheet}
+singularity run {PSYCOPG2_SIF} python 03a_push_busco_results_to_sqldb.py {POSTGRES_CFG} {samplesheet} || status=1
 
-echo "=== [3/5] Merqury QV ==="
+echo "=== [3/6] Merqury QV ==="
 bash 02a_merqury_qv_compile.sh
-singularity run {PSYCOPG2_SIF} python 02b_push_merqury_qv_results_to_sqldb.py {POSTGRES_CFG} {samplesheet}
+singularity run {PSYCOPG2_SIF} python 02b_push_merqury_qv_results_to_sqldb.py {POSTGRES_CFG} {samplesheet} || status=1
 
-echo "=== [4/5] Merqury completeness ==="
+echo "=== [4/6] Merqury completeness ==="
 bash 02c_merqury_completeness_compile.sh
-singularity run {PSYCOPG2_SIF} python 02d_push_merqury_completeness_results_to_sqldb.py {POSTGRES_CFG} {samplesheet}
+singularity run {PSYCOPG2_SIF} python 02d_push_merqury_completeness_results_to_sqldb.py {POSTGRES_CFG} {samplesheet} || status=1
 
-echo "=== [5/5] OMNIC ==="
+echo "=== [5/6] OMNIC ==="
 bash 05_omnic-compile.sh
-singularity run {PSYCOPG2_SIF} python 05a_push_omnic_results_to_sqldb.py {POSTGRES_CFG} {samplesheet}
+singularity run {PSYCOPG2_SIF} python 05a_push_omnic_results_to_sqldb.py {POSTGRES_CFG} {samplesheet} || status=1
 
-echo "Compile + push complete for {run_name}"
+echo "=== [6/6] Hi-C runs (flowcells in the Hi-C BAMs; genomes_db_review 094) ==="
+singularity run {PSYCOPG2_SIF} python 05b_push_hic_runs_to_sqldb.py {POSTGRES_CFG} {samplesheet} || status=1
+
+echo "Compile + push complete for {run_name} (status $status)"
+exit $status
 """
 
 
