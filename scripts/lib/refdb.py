@@ -156,6 +156,9 @@ def check_part_key(og_id, seq_date, version, stage, haplotype):
 
 
 def ensure_assembly(cur, og_id, seq_date, version):
+    """assembly_id for the key, created if missing. ref_assembly.read_set_id (NOT NULL, migration 093)
+    is filled by the ref_assembly_read_set_default trigger: a re-push keeps the assembly's read set,
+    a new assembly gets the one read_set_runs() would give its date (created if missing)."""
     cur.execute(
         "INSERT INTO ref_assembly (og_id, seq_date, version) VALUES (%s, %s, %s) "
         "ON CONFLICT (og_id, seq_date, version) DO UPDATE SET og_id = EXCLUDED.og_id "
@@ -255,8 +258,21 @@ def read_set_runs(cur, og_id, sheet_date):
 
 
 def ensure_read_set(cur, og_id, sheet_date):
-    """read_set_id for (og_id, samplesheet date), created if missing, with its runs linked."""
+    """read_set_id for (og_id, samplesheet date), created with its runs if missing.
+
+    An existing read set keeps the runs it has (genomes_db_review migration 093). They are the reads
+    the assemblies on it were built from, and 093 corrected some from the k-mer evidence (OG838
+    240813 is the 240813 cell alone, though the date rule also gives the 240520 one). Adding the
+    date rule's runs on every push would undo that. A read set with no runs yet (one 093 or the
+    ref_assembly trigger made before the OG's sequencing rows were loaded) gets them."""
     seq_date, runs = read_set_runs(cur, og_id, sheet_date)
+    cur.execute(
+        "SELECT rs.read_set_id, EXISTS (SELECT 1 FROM ref_read_set_run r WHERE r.read_set_id = rs.read_set_id) "
+        "FROM ref_read_set rs WHERE rs.og_id = %s AND coalesce(rs.seq_date, '') = %s",
+        (og_id, seq_date))
+    found = cur.fetchone()
+    if found and found[1]:
+        return found[0]
     cur.execute(
         "INSERT INTO ref_read_set (og_id, seq_date) VALUES (%s, %s) "
         "ON CONFLICT (og_id, (coalesce(seq_date, ''))) DO UPDATE SET og_id = EXCLUDED.og_id "
@@ -296,9 +312,11 @@ def upsert_read_set(cur, table, og_id, seq_date, values):
                     f"WHERE t.read_set_id = rs.read_set_id AND rs.og_id = %s AND rs.seq_date = %s",
                     (og_id, key))
         deleted = cur.rowcount
+        # An assembly's read set stays (ref_assembly.read_set_id, migration 093), QC or not.
         cur.execute("DELETE FROM ref_read_set rs WHERE rs.og_id = %s AND rs.seq_date = %s "
                     "AND NOT EXISTS (SELECT 1 FROM ref_genomescope g WHERE g.read_set_id = rs.read_set_id) "
-                    "AND NOT EXISTS (SELECT 1 FROM ref_hifi_adapter_filter f WHERE f.read_set_id = rs.read_set_id)",
+                    "AND NOT EXISTS (SELECT 1 FROM ref_hifi_adapter_filter f WHERE f.read_set_id = rs.read_set_id) "
+                    "AND NOT EXISTS (SELECT 1 FROM ref_assembly a WHERE a.read_set_id = rs.read_set_id)",
                     (og_id, key))
         return "deleted" if deleted else "unchanged"
     read_set_id = ensure_read_set(cur, og_id, seq_date)
@@ -310,6 +328,170 @@ def upsert_read_set(cur, table, og_id, seq_date, values):
         f"{', '.join(f'{c} = EXCLUDED.{c}' for c in cols)}, loaded_at = now()",
         dict(vals, read_set_id=read_set_id))
     return "upserted"
+
+
+# -- HiFiAdapterFilt per sequencing run (genomes_db_review migration 093) ---------------------------
+#
+# HiFiAdapterFilt filters each cell's BAM separately and writes one .stats file per BAM, so its
+# count belongs to the sequencing row (ref_hifi_adapter_filter_run); the read-set figure in
+# ref_hifi_adapter_filter is their sum. The rules below are the ones 093's backfill used
+# (genomes_db_review/scripts/match_adapter_filter_runs.py).
+
+STATS_MOVIE_RE = re.compile(r"(m\d+[a-z]?_(\d{6})_\d{6}(?:_s\d)?)")
+STATS_TAG_RE = re.compile(r"\.(bc\d+(?:--bc\d+)?|unassigned)\.stats$")
+STATS_COUNT_RE = re.compile(r"Number of adapter contaminated ccs reads:\s*(\d+)")
+
+
+def parse_adapter_stats(text):
+    """The adapter-contaminated read count in a HiFiAdapterFilt .stats file, or None."""
+    m = STATS_COUNT_RE.search(text or "")
+    return int(m.group(1)) if m else None
+
+
+def adapter_stats_cell(path):
+    """(movie, movie date YYMMDD, tag) from a .stats file name; tag is 'bcNNNN', 'unassigned' or
+    'none' (unbarcoded). (None, None, tag) when the name carries no movie (old SSB_cell1_ccs.stats)."""
+    name = Path(str(path)).name
+    m = STATS_MOVIE_RE.search(name)
+    t = STATS_TAG_RE.search(name)
+    tag = t.group(1).split("--")[-1] if t else "none"
+    return (m.group(1), m.group(2), tag) if m else (None, None, tag)
+
+
+def pacbio_cells(cur, og_id):
+    """The OG's non-failed PacBio DNA rows: [(sequencing_id, seq_date, barcode or None)]."""
+    cur.execute(
+        "SELECT DISTINCT s.sequencing_id, s.seq_date, q.barcode FROM v_sequencing_browse s "
+        "LEFT JOIN hifi_read_qc q ON q.sequencing_id = s.sequencing_id "
+        "WHERE s.og_id = %s AND s.technology IN ('PacBio HIFI', 'PacBio') AND s.library_type = 'pacbio' "
+        "AND s.status IS DISTINCT FROM 'Failed' AND s.seq_date ~ '^[0-9]{6}$' "
+        "ORDER BY s.seq_date, s.sequencing_id",
+        (og_id,))
+    return cur.fetchall() or []
+
+
+def _days(a, b):
+    from datetime import datetime
+    return abs((datetime.strptime(a, "%y%m%d") - datetime.strptime(b, "%y%m%d")).days)
+
+
+def _nearest(cells, movie_date):
+    """The sequencing_id nearest the movie date within READ_SET_WINDOW_DAYS, or (None, why)."""
+    best = sorted((_days(d, movie_date), sid) for sid, d, _ in cells if _days(d, movie_date) <= READ_SET_WINDOW_DAYS)
+    if not best:
+        return None, f"no sequencing row within {READ_SET_WINDOW_DAYS} days of the movie"
+    ties = sorted({sid for n, sid in best if n == best[0][0]})
+    if len(ties) > 1:
+        return None, "tie: " + ", ".join(ties)
+    return ties[0], ""
+
+
+def map_adapter_stats(files, cells):
+    """Assign one OG's .stats files to its sequencing rows.
+
+    files: [(path, contam_reads)]. cells: pacbio_cells(). Returns ({sequencing_id: (contam_reads
+    summed, [paths])}, [(path, why)] for files left out).
+    - Copies of one file (hifi/ and hifi/qc_stats/, or several assembly folders) count once, and
+      copies that disagree raise ValueError.
+    - A barcoded file goes to the row with that barcode (hifi_read_qc) nearest the movie date within
+      READ_SET_WINDOW_DAYS; when no row has the barcode, to the nearest row by date.
+    - An unassigned or unbarcoded file is part of the same cell: it follows the movie's barcoded
+      file, else the nearest row by date. One whose movie's barcoded files went to several rows is
+      left out, silently when its count is 0 (it adds nothing to either).
+    """
+    seen = {}
+    left_out = []
+    for path, n in files:
+        movie, movie_date, tag = adapter_stats_cell(path)
+        if movie is None:
+            left_out.append((path, "no PacBio movie in the file name"))
+            continue
+        if n is None:
+            left_out.append((path, "no adapter count in the file"))
+            continue
+        key = (movie, tag)
+        if key in seen and seen[key][1] != n:
+            raise ValueError(f"copies of {movie} {tag} disagree: {seen[key][0]} has {seen[key][1]}, {path} has {n}")
+        seen.setdefault(key, (path, n, movie_date))
+
+    by_movie = {}
+    for (movie, tag), f in seen.items():
+        by_movie.setdefault(movie, {})[tag] = f
+
+    assigned = []
+    for movie, tags in sorted(by_movie.items()):
+        barcoded = set()
+        for tag, (path, n, movie_date) in sorted(tags.items()):
+            if not tag.startswith("bc"):
+                continue
+            with_bc = [c for c in cells if c[2] == tag]
+            sid, why = _nearest(with_bc or cells, movie_date)
+            if sid:
+                barcoded.add(sid)
+                assigned.append((sid, path, n))
+            else:
+                left_out.append((path, why))
+        for tag, (path, n, movie_date) in sorted(tags.items()):
+            if tag.startswith("bc"):
+                continue
+            if len(barcoded) == 1:
+                assigned.append((next(iter(barcoded)), path, n))
+            elif len(barcoded) > 1:
+                if n:
+                    left_out.append((path, "the movie's barcoded files went to several rows"))
+            else:
+                sid, why = _nearest(cells, movie_date)
+                if sid:
+                    assigned.append((sid, path, n))
+                else:
+                    left_out.append((path, why))
+
+    per_run = {}
+    for sid, path, n in assigned:
+        total, paths = per_run.get(sid, (0, []))
+        per_run[sid] = (total + n, paths + [path])
+    return per_run, left_out
+
+
+def upsert_adapter_filter_run(cur, sequencing_id, contam_reads, source=None):
+    """One sequencing row's HiFiAdapterFilt count (ref_hifi_adapter_filter_run). A cell's count does
+    not change when more data arrives, so a re-push replaces it with the same figure."""
+    n = parse_int(contam_reads)
+    if n is None or n < 0:
+        raise ValueError(f"bad contam_reads {contam_reads!r} for {sequencing_id}")
+    cur.execute(
+        "INSERT INTO ref_hifi_adapter_filter_run (sequencing_id, contam_reads, source) VALUES (%s, %s, %s) "
+        "ON CONFLICT (sequencing_id) DO UPDATE SET contam_reads = EXCLUDED.contam_reads, "
+        "source = EXCLUDED.source, loaded_at = now()",
+        (sequencing_id, n, source))
+    return "upserted"
+
+
+def write_adapter_filter(db_params, read_set_rows, stats_files):
+    """HiFiAdapterFilt in one transaction: per run, then per read set.
+
+    read_set_rows: as write_read_set_rows() for ref_hifi_adapter_filter.
+    stats_files: {og_id: [(path, contam_reads)]}, every .stats file found for the OG.
+    A file that maps to no sequencing row is reported and left out, not fatal:
+    v_ref_read_set_readiness lists the runs still without a count.
+    """
+    rows = list(read_set_rows)
+
+    def writes(cur):
+        counts = {}
+        for og_id, files in sorted(stats_files.items()):
+            per_run, left_out = map_adapter_stats(files, pacbio_cells(cur, og_id))
+            for sid, (n, paths) in sorted(per_run.items()):
+                upsert_adapter_filter_run(cur, sid, n, "; ".join(sorted(paths)))
+                counts["run upserted"] = counts.get("run upserted", 0) + 1
+            for path, why in left_out:
+                print(f"⚠️  {og_id}: {path} left out: {why}")
+                counts["file left out"] = counts.get("file left out", 0) + 1
+        for og_id, seq_date, values in rows:
+            outcome = upsert_read_set(cur, "ref_hifi_adapter_filter", og_id, seq_date, values)
+            counts[outcome] = counts.get(outcome, 0) + 1
+        return counts
+    return write_all(db_params, writes, "ref_hifi_adapter_filter_run + ref_hifi_adapter_filter")
 
 
 def upsert_hifi_read_qc(cur, row):

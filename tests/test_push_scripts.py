@@ -142,6 +142,22 @@ class ReadLevel(PushScriptCase):
         self.assertEqual(conn.commits, 0)
         self.assertIn("no samplesheet date", out)
 
+    def test_adapter_filter_per_run_from_the_files_tsv(self):
+        # Migration 093: each .stats file's count goes to its sequencing row, in the same commit.
+        files = ("sample\tpath\tcontam_reads\n"
+                 "OG762\tOG762/01-data-processing/hifiadaptfilt/OG762_241019.hic1/"
+                 "OG762_m84154_241018_054344_s2.hifi_reads.bc2032.stats\t3\n"
+                 "OG762\tOG762/01-data-processing/hifiadaptfilt/OG762_241019.hic1/"
+                 "OG762_m84154_241018_054344_s2.hifi_reads.unassigned.stats\t1\n")
+        conn = FakeConn(pacbio_cells={"OG762": [("OG762H_D_SBL_PACB_241018_LA", "241018", "bc2032")]})
+        conn, code, out = self.run_script(COMPILE / "0a_push_hifiadapt_results_to_sqldb.py",
+                                          ["hifiadaptorfilt_stats_summary.tsv"], ["{fx}/samplesheet.csv"],
+                                          conn=conn, tsv_override={"hifiadaptorfilt_stats_files.tsv": files})
+        self.assert_one_commit(conn, code, out)
+        runs = [p for s, p in conn.statements if s.startswith("INSERT INTO ref_hifi_adapter_filter_run")]
+        self.assertEqual([r[:2] for r in runs], [("OG762H_D_SBL_PACB_241018_LA", 4)])
+        self.assertTrue(conn.inserts("ref_hifi_adapter_filter"))
+
     def test_hifi_yield_sums_smrt_cells(self):
         conn, code, out = self.run_script(COMPILE / "0b_push_hifi_yield_results_to_sqldb.py",
                                           [], ["{fx}/PACB_241018_LA_yield.csv"])

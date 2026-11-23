@@ -25,6 +25,10 @@ class FakeCursor:
             self._result = self.conn.existing_part
         elif up.startswith("SELECT S.SEQUENCING_ID, S.SEQ_DATE FROM V_SEQUENCING_BROWSE"):
             self._rows = list(self.conn.pacbio_rows.get(params[0], []))
+        elif up.startswith("SELECT DISTINCT S.SEQUENCING_ID, S.SEQ_DATE, Q.BARCODE"):
+            self._rows = list(self.conn.pacbio_cells.get(params[0], []))
+        elif up.startswith("SELECT RS.READ_SET_ID"):
+            self._result = self.conn.existing_read_sets.get(params)
         elif up.startswith("DELETE"):
             self.rowcount = self.conn.delete_rowcount
         else:
@@ -44,7 +48,8 @@ class FakeCursor:
 
 
 class FakeConn:
-    def __init__(self, existing_part=None, delete_rowcount=1, fail_on=None, pacbio_rows=None):
+    def __init__(self, existing_part=None, delete_rowcount=1, fail_on=None, pacbio_rows=None,
+                 pacbio_cells=None, existing_read_sets=None):
         self.statements = []
         self.commits = 0
         self.rollbacks = 0
@@ -54,6 +59,9 @@ class FakeConn:
         self.delete_rowcount = delete_rowcount
         self.fail_on = fail_on                  # substring of SQL that raises
         self.pacbio_rows = pacbio_rows or {}    # og_id -> [(sequencing_id, seq_date)] for read sets
+        self.pacbio_cells = pacbio_cells or {}  # og_id -> [(sequencing_id, seq_date, barcode)]
+        # (og_id, seq_date) -> (read_set_id, has runs) for read sets already in the database
+        self.existing_read_sets = existing_read_sets or {}
 
     def cursor(self):
         return FakeCursor(self)

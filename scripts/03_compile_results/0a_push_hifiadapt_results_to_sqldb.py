@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # singularity run $SING/psycopg2:0.1.sif python 0a_push_hifiadapt_results_to_sqldb.py ~/postgresql_details/oceanomics.cfg [samplesheet.csv]
+import re
 import sys
 from pathlib import Path
 import configparser
@@ -72,7 +73,20 @@ def main():
     if not rows:
         print("No rows to upsert. Exiting.")
         return
-    refdb.write_read_set_rows(refdb.load_db_config(config_file), "ref_hifi_adapter_filter", rows)
+
+    # Migration 093: each cell's count goes to its sequencing row (ref_hifi_adapter_filter_run),
+    # from the per-file TSV 0_hifiadaptfilt-stats.py writes next to the summary.
+    files_tsv = Path("hifiadaptorfilt_stats_files.tsv")
+    if not files_tsv.exists():
+        print(f"⚠️  {files_tsv} not found (re-run 0_hifiadaptfilt-stats.py): per-run counts not written")
+        refdb.write_read_set_rows(refdb.load_db_config(config_file), "ref_hifi_adapter_filter", rows)
+        return
+    stats_files = {}
+    for sample, path, contam_reads in pd.read_csv(files_tsv, sep="\t", dtype=str).itertuples(index=False, name=None):
+        og_id = re.match(r"OG\d+", str(sample))
+        if og_id:
+            stats_files.setdefault(og_id.group(0), []).append((path, refdb.parse_int(contam_reads)))
+    refdb.write_adapter_filter(refdb.load_db_config(config_file), rows, stats_files)
 
 
 if __name__ == "__main__":
